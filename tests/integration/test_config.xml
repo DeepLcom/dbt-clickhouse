@@ -44,6 +44,14 @@
                 </replica>
             </shard>
         </test_replica>
+        <test_remote_cluster>
+            <shard>
+                <replica>
+                    <host>ch3</host>
+                    <port>9000</port>
+                </replica>
+            </shard>
+        </test_remote_cluster>
     </remote_servers>
     <keeper_server>
         <tcp_port>9181</tcp_port>
