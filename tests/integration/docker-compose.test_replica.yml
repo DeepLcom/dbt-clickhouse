@@ -1,0 +1,45 @@
+services:
+  ch0:
+    extends:
+      file: docker-compose.yml
+      service: clickhouse
+    environment:
+      - SERVER_INDEX=1
+      - SHARD_NUM=1
+      - REPLICA_NUM=1
+    ports:
+      - "8123:8123"
+      - "8443:8443"
+      - "9000:9000"
+      #  for local docker tests
+      - "10723:8123"
+      - "10743:8443"
+      - "10900:9000"
+  ch1:
+    extends:
+      file: docker-compose.yml
+      service: clickhouse
+    environment:
+      - SERVER_INDEX=2
+      - SHARD_NUM=1
+      - REPLICA_NUM=2
+  ch2:
+    extends:
+      file: docker-compose.yml
+      service: clickhouse
+    environment:
+      - SERVER_INDEX=3
+      - SHARD_NUM=1
+      - REPLICA_NUM=3
+  ch3:
+    extends:
+      file: docker-compose.yml
+      service: clickhouse-remote
+    environment:
+      - SERVER_INDEX=1
+      - SHARD_NUM=1
+      - REPLICA_NUM=1
+
+networks:
+  default:
+    name: integration-test

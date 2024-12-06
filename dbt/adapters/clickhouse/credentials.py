@@ -20,6 +20,7 @@ class ClickHouseCredentials(Credentials):
     schema: Optional[str] = 'default'
     password: str = ''
     cluster: Optional[str] = None
+    remote_clusters: Optional[list[str]] = None
     database_engine: Optional[str] = None
     cluster_mode: bool = False
     secure: bool = False

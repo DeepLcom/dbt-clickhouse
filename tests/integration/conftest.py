@@ -29,7 +29,6 @@ def ch_test_version():
 # repos. Example in dbt.tests.adapter.basic.test_base.
 @pytest.fixture(scope="session")
 def test_config(ch_test_users, ch_test_version):
-    compose_file = f'{Path(__file__).parent}/docker-compose.yml'
     test_host = os.environ.get('DBT_CH_TEST_HOST', 'localhost')
     test_port = int(os.environ.get('DBT_CH_TEST_PORT', 8123))
     client_port = int(os.environ.get('DBT_CH_TEST_CLIENT_PORT', 0))
@@ -39,6 +38,7 @@ def test_config(ch_test_users, ch_test_version):
     test_user = os.environ.get('DBT_CH_TEST_USER', 'default')
     test_password = os.environ.get('DBT_CH_TEST_PASSWORD', '')
     test_cluster = os.environ.get('DBT_CH_TEST_CLUSTER', '')
+    test_remote_clusters = os.environ.get('DBT_CH_TEST_REMOTE_CLUSTERS', '').split(',')
     test_db_engine = os.environ.get('DBT_CH_TEST_DB_ENGINE', '')
     test_secure = test_port in (8443, 9440)
     test_cluster_mode = os.environ.get('DBT_CH_TEST_CLUSTER_MODE', '').lower() in (
@@ -46,6 +46,7 @@ def test_config(ch_test_users, ch_test_version):
         'true',
         'yes',
     )
+    compose_file = f'{Path(__file__).parent}/docker-compose.{test_cluster}.yml'
     if ch_test_version.startswith('22.3'):
         os.environ['DBT_CH_TEST_SETTINGS'] = '22_3'
 
@@ -64,7 +65,7 @@ def test_config(ch_test_users, ch_test_version):
             url = f"http://{test_host}:{client_port}"
             wait_until_responsive(timeout=30.0, pause=0.5, check=lambda: is_responsive(url))
         except Exception as e:
-            raise Exception('Failed to run docker compose: {}', str(e))
+            raise Exception(f'Failed to run docker compose: {e}')
     elif not client_port:
         if test_driver == 'native':
             client_port = 8443 if test_port == 9440 else 8123
@@ -94,6 +95,7 @@ def test_config(ch_test_users, ch_test_version):
         'user': test_user,
         'password': test_password,
         'cluster': test_cluster,
+        'remote_clusters': test_remote_clusters,
         'db_engine': test_db_engine,
         'secure': test_secure,
         'cluster_mode': test_cluster_mode,
@@ -123,6 +125,7 @@ def dbt_profile_target(test_config):
         'password': test_config['password'],
         'port': test_config['port'],
         'cluster': test_config['cluster'],
+        'remote_clusters': test_config['remote_clusters'],
         'database_engine': test_config['db_engine'],
         'cluster_mode': test_config['cluster_mode'],
         'secure': test_config['secure'],

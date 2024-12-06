@@ -43,3 +43,9 @@ The setting `allow_nondeterministic_mutations` is not enabled and is `read_only`
 of `light weight deletes` and therefore the delete+insert incremental strategy.  This may negatively affect performance
 for incremental models
 """
+
+remote_cluster_not_known_by_host = """
+The clusters: {0} are not known to the current host, but are configured as `remote_clusters` in the dbt configuration.
+Either add the cluster name to the remote_servers section of your ClickHouse config.xml, or remove the entries from the
+`remote_clusters` section of your dbt configuration.
+"""
