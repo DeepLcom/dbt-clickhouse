@@ -210,7 +210,7 @@ class ClickHouseAdapter(SQLAdapter):
         changed_data_types = []
         for column in target_in_source:
             source_column = source_map.get(column.name)
-            if source_column is not None and column.dtype != source_column.dtype:
+            if source_column is not None and (column.dtype != source_column.dtype or column.nullable != source_column.nullable):
                 changed_data_types.append(column)
 
         clickhouse_column_changes = ClickHouseColumnChanges(
