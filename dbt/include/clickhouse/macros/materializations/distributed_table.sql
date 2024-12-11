@@ -87,10 +87,10 @@
 {% endmaterialization %}
 
 {% macro create_distributed_table(relation, local_relation) %}
-    {%- set cluster = adapter.get_clickhouse_cluster_name() -%}
+   {%- set cluster = adapter.get_clickhouse_cluster_name() -%}
    {% if cluster is none %}
-        {% do exceptions.raise_compiler_error('Cluster name should be defined for using distributed materializations, current is None') %}
-    {% endif %}
+      {% do exceptions.raise_compiler_error('Cluster name should be defined for using distributed materializations, current is None') %}
+   {% endif %}
 
    {%- set cluster = cluster[1:-1] -%}
    {%- set sharding = config.get('sharding_key') -%}

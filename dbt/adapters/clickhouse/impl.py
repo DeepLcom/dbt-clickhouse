@@ -121,9 +121,16 @@ class ClickHouseAdapter(SQLAdapter):
             return f'"{conn.credentials.cluster}"'
 
     @available.parse(lambda *a, **k: {})
-    def get_clickhouse_remote_clusters(self) -> Optional[list[str]]:
+    def get_clickhouse_remote_clusters(self, add_to_remote_clusters: Optional[bool]) -> Optional[list[str]]:
+        if not add_to_remote_clusters:
+            return
         conn = self.connections.get_if_exists()
-        return conn.credentials.remote_clusters
+        remote_clusters = conn.credentials.remote_clusters
+        if not remote_clusters:
+            raise DbtRuntimeError(
+                '`add_to_remote_clusters` is set for the model, but no `remote_clusters` are defined via credentials!'
+            )
+        return remote_clusters
 
     @available.parse(lambda *a, **k: {})
     def get_clickhouse_local_suffix(self):
