@@ -9,7 +9,7 @@
   {%- call statement('create_schema') -%}
     create database if not exists {{ relation.without_identifier().include(database=False) }}
         {{ on_cluster_clause(relation)}}
-        {{ adapter.clickhouse_db_engine_clause() }}
+        {{ adapter.clickhouse_db_engine_clause(relation) }}
   {% endcall %}
 {% endmacro %}
 

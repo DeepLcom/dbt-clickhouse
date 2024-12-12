@@ -56,6 +56,14 @@
 
   {{ run_hooks(post_hooks, inside_transaction=True) }}
 
+  {% if remote_clusters %}
+    {% for remote_cluster in remote_clusters %}
+      {% set remote_relation = target_relation.incorporate(remote_cluster=remote_cluster.get('name')) %}
+      {% do create_schema(remote_relation) %}
+      {% do run_query(create_distributed_table(remote_relation, target_relation)) %}
+    {% endfor %}
+  {% endif %}
+
   {{ adapter.commit() }}
 
   {{ drop_relation_if_exists(backup_relation) }}
@@ -129,9 +137,9 @@
 
 {% macro on_cluster_clause(relation, force_sync) %}
   {% set active_cluster = adapter.get_clickhouse_cluster_name() %}
-  {%- if active_cluster is not none and relation.should_on_cluster %}
+  {%- if (active_cluster is not none and relation.should_on_cluster) or relation.remote_cluster %}
     {# Add trailing whitespace to avoid problems when this clause is not last #}
-    ON CLUSTER {{ active_cluster + ' ' }}
+    ON CLUSTER {{ relation.remote_cluster or active_cluster }}
     {%- if force_sync %}
     SYNC
     {%- endif %}

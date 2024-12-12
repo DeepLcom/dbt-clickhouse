@@ -44,6 +44,7 @@ class ClickHouseRelation(BaseRelation):
     quote_character: str = '`'
     can_exchange: bool = False
     can_on_cluster: bool = False
+    remote_cluster: Optional[str] = None
 
     def __post_init__(self):
         if self.database != self.schema and self.database:

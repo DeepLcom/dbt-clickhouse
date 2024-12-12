@@ -79,6 +79,15 @@
 
   {% do persist_docs(target_relation, model) %}
   {{ run_hooks(post_hooks, inside_transaction=True) }}
+
+  {% if remote_clusters %}
+    {% for remote_cluster in remote_clusters %}
+      {% set remote_relation = target_relation.incorporate(remote_cluster=remote_cluster.get('name')) %}
+      {% do create_schema(remote_relation) %}
+      {% do run_query(create_distributed_table(remote_relation, target_relation_local)) %}
+    {% endfor %}
+  {% endif %}
+
   {{ adapter.commit() }}
   {{ drop_relation_if_exists(backup_relation) }}
   {{ run_hooks(post_hooks, inside_transaction=False) }}
@@ -87,10 +96,10 @@
 {% endmaterialization %}
 
 {% macro create_distributed_table(relation, local_relation) %}
-    {%- set cluster = adapter.get_clickhouse_cluster_name() -%}
+   {%- set cluster = adapter.get_clickhouse_cluster_name() -%}
    {% if cluster is none %}
-        {% do exceptions.raise_compiler_error('Cluster name should be defined for using distributed materializations, current is None') %}
-    {% endif %}
+      {% do exceptions.raise_compiler_error('Cluster name should be defined for using distributed materializations, current is None') %}
+   {% endif %}
 
    {%- set cluster = cluster[1:-1] -%}
    {%- set sharding = config.get('sharding_key') -%}

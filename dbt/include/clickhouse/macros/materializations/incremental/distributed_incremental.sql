@@ -30,6 +30,7 @@
   {%- set grant_config = config.get('grants') -%}
   {%- set full_refresh_mode = (should_full_refresh() or existing_relation.is_view) -%}
   {%- set on_schema_change = incremental_validate_on_schema_change(config.get('on_schema_change'), default='ignore') -%}
+  {%- set remote_clusters = adapter.get_clickhouse_remote_clusters(config.get('add_to_remote_clusters')) -%}
 
 
   {{ create_schema(target_relation_local) }}
@@ -147,6 +148,14 @@
   {% endif %}
 
   {{ run_hooks(post_hooks, inside_transaction=True) }}
+
+  {% if remote_clusters %}
+    {% for remote_cluster in remote_clusters %}
+      {% set remote_relation = target_relation.incorporate(remote_cluster=remote_cluster.get('name')) %}
+      {% do create_schema(remote_relation) %}
+      {% do run_query(create_distributed_table(remote_relation, target_relation_local)) %}
+    {% endfor %}
+  {% endif %}
 
   {% do adapter.commit() %}
 

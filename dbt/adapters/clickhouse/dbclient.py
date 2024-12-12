@@ -12,6 +12,8 @@ from dbt.adapters.clickhouse.errors import (
     lw_deletes_not_enabled_warning,
     nd_mutations_not_enabled_error,
     nd_mutations_not_enabled_warning,
+    remote_cluster_not_known_by_host,
+    remote_cluster_without_name,
 )
 from dbt.adapters.clickhouse.logger import logger
 from dbt.adapters.clickhouse.query import quote_identifier
@@ -94,6 +96,7 @@ class ChClientWrapper(ABC):
                 credentials.use_lw_deletes
             )
             self.atomic_exchange = not check_exchange or self._check_atomic_exchange()
+            self._check_remote_clusters(credentials.remote_clusters)
         except Exception as ex:
             self.close()
             raise ex
@@ -223,6 +226,19 @@ class ChClientWrapper(ABC):
                 f'Failed to create {self.database} database due to ClickHouse exception'
             ) from ex
         self._set_client_database()
+
+    def _check_remote_clusters(self, remote_clusters: list[dict]) -> None:
+        if not remote_clusters:
+            return
+
+        remote_cluster_names = [cluster.get('name') for cluster in remote_clusters]
+        if None in remote_cluster_names:
+            raise DbtConfigError(remote_cluster_without_name.format(remote_clusters))
+
+        cluster_results = self.command('select distinct cluster from system.clusters')
+        missing_clusters_on_host = [cluster for cluster in remote_cluster_names if cluster not in cluster_results]
+        if missing_clusters_on_host:
+            raise DbtConfigError(remote_cluster_not_known_by_host.format(missing_clusters_on_host))
 
     def _check_atomic_exchange(self) -> bool:
         try:

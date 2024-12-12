@@ -121,6 +121,18 @@ class ClickHouseAdapter(SQLAdapter):
             return f'"{conn.credentials.cluster}"'
 
     @available.parse(lambda *a, **k: {})
+    def get_clickhouse_remote_clusters(self, add_to_remote_clusters: Optional[bool]) -> Optional[list[dict]]:
+        if not add_to_remote_clusters:
+            return
+        conn = self.connections.get_if_exists()
+        remote_clusters = conn.credentials.remote_clusters
+        if not remote_clusters:
+            raise DbtRuntimeError(
+                '`add_to_remote_clusters` is set for the model, but no `remote_clusters` are defined via credentials!'
+            )
+        return remote_clusters
+
+    @available.parse(lambda *a, **k: {})
     def get_clickhouse_local_suffix(self):
         conn = self.connections.get_if_exists()
         suffix = conn.credentials.local_suffix
@@ -140,11 +152,22 @@ class ClickHouseAdapter(SQLAdapter):
         return ''
 
     @available
-    def clickhouse_db_engine_clause(self):
+    def clickhouse_db_engine_clause(self, relation: ClickHouseRelation):
         conn = self.connections.get_if_exists()
+        if conn and relation.remote_cluster:
+            engine = self._get_clickhouse_remote_db_engine(relation.remote_cluster, conn.credentials.remote_clusters)
+            return f'ENGINE = {engine}'
         if conn and conn.credentials.database_engine:
-            return f'ENGINE {conn.credentials.database_engine}'
+            return f'ENGINE = {conn.credentials.database_engine}'
         return ''
+
+    @staticmethod
+    def _get_clickhouse_remote_db_engine(cluster_name: str, remote_clusters: list[dict]) -> str:
+        default_engine = 'Atomic()'
+        for remote_cluster in remote_clusters:
+            if remote_cluster['name'] == cluster_name:
+                return remote_cluster.get('database_engine') or default_engine
+        return default_engine
 
     @available
     def is_before_version(self, version: str) -> bool:
