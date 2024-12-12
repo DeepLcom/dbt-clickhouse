@@ -40,9 +40,9 @@ services:
       - SHARD_NUM=1
       - REPLICA_NUM=1
     ports:
-      - "8124:8123"
+      - "8124:8124"
       - "8445:8443"
-      - "9001:9000"
+      - "9001:9001"
 
 networks:
   default:

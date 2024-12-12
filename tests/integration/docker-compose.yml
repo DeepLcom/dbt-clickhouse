@@ -25,10 +25,5 @@ services:
     <<: *ch-common
     volumes:
       - type: bind
-        source: ${PROJECT_ROOT:-.}/test_config.xml
+        source: ${PROJECT_ROOT:-.}/test_config_remote.xml
         target: /etc/clickhouse-server/config.d/test_config_remote.xml
-
-
-networks:
-  default:
-    name: integration-test

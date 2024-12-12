@@ -1,6 +1,6 @@
 <clickhouse>
-    <http_port>8123</http_port>
-    <tcp_port>9000</tcp_port>
+    <http_port>8124</http_port>
+    <tcp_port>9001</tcp_port>
     <interserver_http_port>9009</interserver_http_port>
     <macros>
         <shard from_env="SHARD_NUM" />
@@ -12,7 +12,7 @@
             <shard>
                 <replica>
                     <host>ch3</host>
-                    <port>9000</port>
+                    <port>9001</port>
                 </replica>
             </shard>
         </test_remote_cluster>
