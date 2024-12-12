@@ -38,7 +38,8 @@ def test_config(ch_test_users, ch_test_version):
     test_user = os.environ.get('DBT_CH_TEST_USER', 'default')
     test_password = os.environ.get('DBT_CH_TEST_PASSWORD', '')
     test_cluster = os.environ.get('DBT_CH_TEST_CLUSTER', '')
-    test_remote_clusters = os.environ.get('DBT_CH_TEST_REMOTE_CLUSTERS', '').split(',')
+    test_remote_clusters = [{'name': cluster, 'database_engine': 'Atomic()'}
+                            for cluster in os.environ.get('DBT_CH_TEST_REMOTE_CLUSTERS', '').split(',')]
     test_db_engine = os.environ.get('DBT_CH_TEST_DB_ENGINE', '')
     test_secure = test_port in (8443, 9440)
     test_cluster_mode = os.environ.get('DBT_CH_TEST_CLUSTER_MODE', '').lower() in (
@@ -63,7 +64,7 @@ def test_config(ch_test_users, ch_test_version):
             if up_result[0]:
                 raise Exception(f'Failed to start docker: {up_result[2]}')
             url = f"http://{test_host}:{client_port}"
-            wait_until_responsive(timeout=30.0, pause=0.5, check=lambda: is_responsive(url))
+            wait_until_responsive(timeout=15.0, pause=0.5, check=lambda: is_responsive(url))
         except Exception as e:
             raise Exception(f'Failed to run docker compose: {e}')
     elif not client_port:

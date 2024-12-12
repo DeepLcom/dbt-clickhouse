@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Literal, Optional, Union
 
 from dbt.adapters.contracts.connection import Credentials
 from dbt_common.exceptions import DbtRuntimeError
@@ -20,9 +20,9 @@ class ClickHouseCredentials(Credentials):
     schema: Optional[str] = 'default'
     password: str = ''
     cluster: Optional[str] = None
-    remote_clusters: Optional[list[str]] = None
     database_engine: Optional[str] = None
     cluster_mode: bool = False
+    remote_clusters: Optional[list[dict[Literal['name', 'database_engine'], str]]] = None
     secure: bool = False
     verify: bool = True
     connect_timeout: int = 10

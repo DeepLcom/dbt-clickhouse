@@ -39,6 +39,10 @@ services:
       - SERVER_INDEX=1
       - SHARD_NUM=1
       - REPLICA_NUM=1
+    ports:
+      - "8124:8123"
+      - "8445:8443"
+      - "9001:9000"
 
 networks:
   default:

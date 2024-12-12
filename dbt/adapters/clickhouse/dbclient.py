@@ -13,6 +13,7 @@ from dbt.adapters.clickhouse.errors import (
     nd_mutations_not_enabled_error,
     nd_mutations_not_enabled_warning,
     remote_cluster_not_known_by_host,
+    remote_cluster_without_name,
 )
 from dbt.adapters.clickhouse.logger import logger
 from dbt.adapters.clickhouse.query import quote_identifier
@@ -226,12 +227,16 @@ class ChClientWrapper(ABC):
             ) from ex
         self._set_client_database()
 
-    def _check_remote_clusters(self, remote_clusters: list[str]) -> None:
+    def _check_remote_clusters(self, remote_clusters: list[dict]) -> None:
         if not remote_clusters:
             return
 
+        remote_cluster_names = [cluster.get('name') for cluster in remote_clusters]
+        if None in remote_cluster_names:
+            raise DbtConfigError(remote_cluster_without_name.format(remote_clusters))
+
         cluster_results = self.command('select distinct cluster from system.clusters')
-        missing_clusters_on_host = [cluster for cluster in remote_clusters if cluster not in cluster_results]
+        missing_clusters_on_host = [cluster for cluster in remote_cluster_names if cluster not in cluster_results]
         if missing_clusters_on_host:
             raise DbtConfigError(remote_cluster_not_known_by_host.format(missing_clusters_on_host))
 

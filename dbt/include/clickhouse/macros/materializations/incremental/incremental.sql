@@ -112,11 +112,11 @@
   {{ run_hooks(post_hooks, inside_transaction=True) }}
 
   {% if remote_clusters %}
-     {% for remote_cluster in remote_clusters %}
-       {% set remote_relation = target_relation.incorporate(remote_cluster=remote_cluster) %}
-       {% do create_schema(remote_relation) %}
-       {% do run_query(create_distributed_table(remote_relation, target_relation)) %}
-     {% endfor %}
+    {% for remote_cluster in remote_clusters %}
+      {% set remote_relation = target_relation.incorporate(remote_cluster=remote_cluster.get('name')) %}
+      {% do create_schema(remote_relation) %}
+      {% do run_query(create_distributed_table(remote_relation, target_relation)) %}
+    {% endfor %}
   {% endif %}
 
   {% do adapter.commit() %}

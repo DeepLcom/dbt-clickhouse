@@ -49,3 +49,9 @@ The clusters: {0} are not known to the current host, but are configured as `remo
 Either add the cluster name to the remote_servers section of your ClickHouse config.xml, or remove the entries from the
 `remote_clusters` section of your dbt configuration.
 """
+
+remote_cluster_without_name = """
+The `name` attribute of a remote cluster in the `remote_clusters` profile section is missing.
+
+   Remote cluster section: {0}
+"""
