@@ -117,8 +117,7 @@ class ClickHouseAdapter(SQLAdapter):
     @available.parse(lambda *a, **k: {})
     def get_clickhouse_cluster_name(self):
         conn = self.connections.get_if_exists()
-        if conn.credentials.cluster:
-            return f'"{conn.credentials.cluster}"'
+        return conn.credentials.cluster
 
     @available.parse(lambda *a, **k: {})
     def get_clickhouse_local_suffix(self):

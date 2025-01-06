@@ -86,24 +86,30 @@
 
 {% endmaterialization %}
 
-{% macro create_distributed_table(relation, local_relation) %}
-    {%- set cluster = adapter.get_clickhouse_cluster_name() -%}
-   {% if cluster is none %}
-        {% do exceptions.raise_compiler_error('Cluster name should be defined for using distributed materializations, current is None') %}
-    {% endif %}
+{% macro create_distributed_table(relation, local_relation, sql=none) %}
+  {% if adapter.get_clickhouse_cluster_name() is none %}
+    {% do exceptions.raise_compiler_error('Cluster name should be defined for using distributed materializations, current is None') %}
+  {% endif %}
 
-   {%- set cluster = cluster[1:-1] -%}
-   {%- set sharding = config.get('sharding_key') -%}
-
-    create or replace table {{ relation }} {{ on_cluster_clause(relation) }} as {{ local_relation }}
-    ENGINE = Distributed('{{ cluster}}', '{{ local_relation.schema }}', '{{ local_relation.name }}'
-    {%- if sharding is not none and sharding.strip() != '' -%}
-        , {{ sharding }}
-    {%- else %}
-        , rand()
-    {% endif -%}
-    )
- {% endmacro %}
+  {%- set remote_cluster = local_relation.remote_cluster or adapter.get_clickhouse_cluster_name() -%}
+  {%- set sharding = config.get('sharding_key') -%}
+  {%- set reference = "as " ~ local_relation -%}
+  {%- if sql -%}
+    {%- set col_list = [] -%}
+    {%- for col in adapter.get_column_schema_from_query(sql) -%}
+      {%- do col_list.append(col.name + ' ' + col.data_type) -%}
+    {%- endfor -%}
+    {%- set reference = "(" ~ (col_list | join(', ')) ~ ")" -%}
+  {%- endif -%}
+  create or replace table {{ relation }} {{ on_cluster_clause(relation) }} {{ reference }}
+  engine = Distributed('{{ remote_cluster }}', '{{ local_relation.schema }}', '{{ local_relation.name }}'
+  {%- if sharding is not none and sharding.strip() != '' -%}
+    , {{ sharding }}
+  {%- else %}
+    , rand()
+  {% endif -%}
+  )
+{% endmacro %}
 
 {% macro create_empty_table_from_relation(relation, source_relation, sql=none) -%}
   {%- set sql_header = config.get('sql_header', none) -%}
