@@ -329,6 +329,7 @@ class ClickHouseAdapter(SQLAdapter):
                 and rel_type == ClickHouseRelationType.Table
                 and db_engine in ('Atomic', 'Replicated')
             )
+            can_on_cluster = (on_cluster >= 1) and db_engine != 'Replicated'
 
             relation = self.Relation.create(
                 database='',
@@ -336,7 +337,7 @@ class ClickHouseAdapter(SQLAdapter):
                 identifier=name,
                 type=rel_type,
                 can_exchange=can_exchange,
-                can_on_cluster=(on_cluster >= 1),
+                can_on_cluster=can_on_cluster,
             )
             relations.append(relation)
 
