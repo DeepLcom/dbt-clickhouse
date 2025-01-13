@@ -6,6 +6,7 @@ from dbt.tests.adapter.basic.files import model_incremental, schema_base_yml
 
 
 class TestReplicatedDatabaseSimpleMaterialization(BaseSimpleMaterializations):
+    """Contains tests for table, view and swappable view materialization."""
     @pytest.fixture(scope="class")
     def test_config(self, test_config):
         test_config["db_engine"] = "Replicated('/clickhouse/databases/{uuid}', '{shard}', '{replica}')"
