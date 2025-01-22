@@ -46,14 +46,6 @@
                 </replica>
             </shard>
         </test_replica>
-        <test_remote>
-            <shard>
-                <replica>
-                    <host>ch2</host>
-                    <port>9000</port>
-                </replica>
-            </shard>
-        </test_remote>
     </remote_servers>
     <keeper_server>
         <tcp_port>9181</tcp_port>

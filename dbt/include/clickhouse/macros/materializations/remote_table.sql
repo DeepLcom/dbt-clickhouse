@@ -1,17 +1,32 @@
 {% materialization remote_table, adapter='clickhouse', supported_languages=['python', 'sql'] -%}
-  {%- set remote_config = config.get('remote_config', {}) -%}
-  {%- set remote_cluster = remote_config.get('cluster') or adapter.get_clickhouse_cluster_name() -%}
-  {%- set remote_schema = remote_config.get('schema') or adapter.get_clickhouse_local_db_prefix() + this.schema -%}
-  {%- set remote_identifier = remote_config.get('identifier') or this.identifier + adapter.get_clickhouse_local_suffix() -%}
+  {%- set remote_config = config.get('remote_config', none) -%}
+  {%- if remote_config is none -%}
+    {% do exceptions.raise_compiler_error('`remote_config` model configuration needs to be provided to run `remote_table` materialization.') %}
+  {%- endif -%}
 
-  {% set target_relation = this.incorporate(type='table') %}
-  {% set remote_relation = target_relation.incorporate(path={"identifier": remote_identifier, "schema": remote_schema}, remote_cluster=remote_cluster) %}
+  {%- set remote_cluster = remote_config.get('cluster') -%}
+  {%- set remote_schema = remote_config.get('local_db_prefix') + this.schema -%}
+  {%- set remote_identifier = this.identifier + remote_config.get('local_suffix') -%}
+
+  {%- set target_relation = this.incorporate(type='table') -%}
+  {%- set remote_relation = target_relation.incorporate(path={"identifier": remote_identifier, "schema": remote_schema}, remote_cluster=remote_cluster) -%}
+  {%- set existing_relation = load_cached_relation(this) -%}
 
   {{ run_hooks(pre_hooks, inside_transaction=False) }}
   {{ run_hooks(pre_hooks, inside_transaction=True) }}
 
+  {%- set column_changes = none -%}
+  {%- if existing_relation -%}
+    {%- set column_changes = adapter.check_incremental_schema_changes('ignore', existing_relation, sql) -%}
+  {%- endif -%}
+
   {% call statement('main') %}
-    {{ create_distributed_table(target_relation, remote_relation, sql) }}
+    {%- if column_changes or existing_relation is none or should_full_refresh() -%}
+      {{ create_distributed_table(target_relation, remote_relation, sql) }}
+    {%- else -%}
+      {{ log("no-op run: distributed table exists with correct schema.", info=true) }}
+      select true;
+    {%- endif -%}
   {% endcall %}
 
   {% set should_revoke = should_revoke(target_relation, full_refresh_mode) %}
