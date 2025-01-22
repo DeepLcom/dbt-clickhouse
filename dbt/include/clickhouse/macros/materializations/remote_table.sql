@@ -1,8 +1,5 @@
 {% materialization remote_table, adapter='clickhouse', supported_languages=['python', 'sql'] -%}
-  {%- set remote_config = config.get('remote_config', none) -%}
-  {%- if remote_config is none -%}
-    {% do exceptions.raise_compiler_error('`remote_config` model configuration needs to be provided to run `remote_table` materialization.') %}
-  {%- endif -%}
+  {%- set remote_config = config.require('remote_config') -%}
 
   {%- set remote_cluster = remote_config.get('cluster') -%}
   {%- set remote_schema = remote_config.get('local_db_prefix') + this.schema -%}
