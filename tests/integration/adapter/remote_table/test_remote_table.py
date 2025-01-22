@@ -72,6 +72,11 @@ class TestRemoteTableRemoteConfig:
 
 class TestRemoteTableRemoteConfigReplicatedDB(TestRemoteTableRemoteConfig):
     @pytest.fixture(scope="class")
+    def test_config(self, test_config):
+        test_config["db_engine"] = "Replicated('/clickhouse/databases/{uuid}', '{shard}', '{replica}')"
+        return test_config
+
+    @pytest.fixture(scope="class")
     def init_local_table(self, project):
         schema_name = f"_{project.test_schema}"
         with get_connection(project.adapter):
@@ -84,8 +89,3 @@ class TestRemoteTableRemoteConfigReplicatedDB(TestRemoteTableRemoteConfig):
             (key1 UInt64, key2 Int64)
             engine=MergeTree order by key1
         """)
-
-    @pytest.fixture(scope="class")
-    def test_config(self, test_config):
-        test_config["db_engine"] = "Replicated('/clickhouse/databases/{uuid}', '{shard}', '{replica}')"
-        return test_config
