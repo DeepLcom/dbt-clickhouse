@@ -1,10 +1,10 @@
+import json
 import pytest
 from dbt.tests.util import run_dbt, run_dbt_and_capture, get_connection
 
 model = """
 {{
     config(
-        materialized='remote_table',
         remote_config={'cluster': 'test_shard', 'local_db_prefix': '_', 'local_suffix': '_local'},
         sharding_key='key1',
     )
@@ -32,7 +32,8 @@ class TestRemoteTableRemoteConfig:
 
     def test_with_remote_configuration(self, project, init_local_table):
         # the created distributed table should point to a local table as defined in the model's `remote_config`
-        run_dbt()
+        materialized_var = {"materialized": "remote_table"}
+        run_dbt(["run", "--vars", json.dumps(materialized_var)])
 
         project.run_sql(f"""
             insert into {project.test_schema}.remote_table
@@ -44,7 +45,7 @@ class TestRemoteTableRemoteConfig:
         self._assert_correct_data(project)
 
         # rerun (should be no-op)
-        _, log_output = run_dbt_and_capture()
+        _, log_output = run_dbt_and_capture(["run", "--vars", json.dumps(materialized_var)])
         assert "no-op run" in log_output
 
     @staticmethod

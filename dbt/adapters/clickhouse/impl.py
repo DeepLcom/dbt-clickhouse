@@ -27,6 +27,8 @@ from dbt_common.contracts.constraints import ConstraintType, ModelLevelConstrain
 from dbt_common.events.functions import warn_or_error
 from dbt_common.exceptions import DbtInternalError, DbtRuntimeError, NotImplementedError
 from dbt_common.utils import filter_null_values
+from dbt.contracts.graph.nodes import BaseNode
+from dbt.flags import get_flags
 
 from dbt.adapters.clickhouse.cache import ClickHouseRelationsCache
 from dbt.adapters.clickhouse.column import ClickHouseColumn, ClickHouseColumnChanges
@@ -555,6 +557,16 @@ class ClickHouseDatabase:
     name: str
     engine: str
     comment: str
+
+
+
+def get_materialization(self):
+    flags = get_flags()
+    materialized = flags.vars.get('materialized')
+    return materialized or self.config.materialized
+
+# patches a BaseNode method to allow setting `materialized` config overrides via dbt flags
+BaseNode.get_materialization = get_materialization
 
 
 def _expect_row_value(key: str, row: "agate.Row"):
