@@ -32,7 +32,7 @@
       db.engine as db_engine,
       {%- if adapter.get_clickhouse_cluster_name() -%}
         count(distinct _shard_num) > 1  as  is_on_cluster
-        from clusterAllReplicas({{ adapter.get_clickhouse_cluster_name() }}, system.tables) as t
+        from clusterAllReplicas('{{ adapter.get_clickhouse_cluster_name() }}', system.tables) as t
           join system.databases as db on t.database = db.name
         where schema = '{{ schema_relation.schema }}'
         group by name, schema, type, db_engine

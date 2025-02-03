@@ -7,6 +7,8 @@
         <replica from_env="REPLICA_NUM" />
         <server_index from_env="SERVER_INDEX" />
     </macros>
+    <default_replica_path>/clickhouse/tables/{uuid}/{shard}</default_replica_path>
+    <default_replica_name>{replica}</default_replica_name>
     <remote_servers>
         <test_shard>
             <shard>

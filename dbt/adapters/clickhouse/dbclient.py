@@ -107,6 +107,7 @@ class ChClientWrapper(ABC):
             "distributed_table": {},
             "distributed_incremental": {},
             "general": {},
+            "remote_table": {},
         }
         if (
             not credentials.allow_automatic_deduplication
