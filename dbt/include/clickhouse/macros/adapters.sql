@@ -24,6 +24,7 @@
     select
       t.name as name,
       t.database as schema,
+      t.engine_full as engine_full,
       multiIf(
         engine in ('MaterializedView', 'View'), 'view',
         engine = 'Dictionary', 'dictionary',
@@ -35,7 +36,7 @@
         from cluster('{{ adapter.get_clickhouse_cluster_name() }}', system.tables) as t
           join system.databases as db on t.database = db.name
         where schema = '{{ schema_relation.schema }}'
-        group by name, schema, type, db_engine
+        group by name, schema, engine_full, type, db_engine
       {%- else -%}
         0 as is_on_cluster
           from system.tables as t join system.databases as db on t.database = db.name

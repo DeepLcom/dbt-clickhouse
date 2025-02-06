@@ -15,6 +15,7 @@ from typing import (
     Tuple,
     Union,
 )
+import re
 
 from dbt.adapters.base import AdapterConfig, available
 from dbt.adapters.base.impl import BaseAdapter, ConstraintSupport
@@ -242,6 +243,28 @@ class ClickHouseAdapter(SQLAdapter):
         return clickhouse_column_changes
 
     @available.parse_none
+    def check_distributed_engine_changes(self, engine_clause: Optional[str], target_engine: dict) -> bool:
+        if not engine_clause:
+            return True
+
+        # see pattern reference here: https://clickhouse.com/docs/en/engines/table-engines/special/distributed
+        pattern = (
+            r"Distributed\(['\"`]?([^'\"`,]+)['\"`]?,\s*['\"`]?([^'\"`,]+)['\"`]?,\s*['\"`]?([^'\"`,]+)['\"`]?"
+            r"(?:,\s*['\"`]?([^'\"`,]+)['\"`]?)?(?:,\s*['\"`]?[^'\"`,]+['\"`]?)?\)"
+        )
+        match = re.match(pattern, engine_clause)
+        if match:
+            existing_engine = dict(
+                cluster = match.group(1),
+                database = match.group(2),
+                table = match.group(3),
+                sharding_key = match.group(4)
+            )
+            return existing_engine != target_engine
+
+        return True
+
+    @available.parse_none
     def s3source_clause(
         self,
         config_name: str,
@@ -318,7 +341,7 @@ class ClickHouseAdapter(SQLAdapter):
 
         relations = []
         for row in results:
-            name, schema, type_info, db_engine, on_cluster = row
+            name, schema, engine, type_info, db_engine, on_cluster = row
             if 'view' in type_info:
                 rel_type = ClickHouseRelationType.View
             elif type_info == 'dictionary':
@@ -339,6 +362,7 @@ class ClickHouseAdapter(SQLAdapter):
                 type=rel_type,
                 can_exchange=can_exchange,
                 can_on_cluster=can_on_cluster,
+                engine=engine
             )
             relations.append(relation)
 

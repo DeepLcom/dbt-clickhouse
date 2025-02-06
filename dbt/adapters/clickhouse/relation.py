@@ -45,6 +45,7 @@ class ClickHouseRelation(BaseRelation):
     can_exchange: bool = False
     can_on_cluster: bool = False
     remote_cluster: Optional[str] = None
+    engine: Optional[str] = None
 
     def __post_init__(self):
         if self.database != self.schema and self.database:
@@ -114,6 +115,7 @@ class ClickHouseRelation(BaseRelation):
         # schema with the database instead, since that's presumably what's intended for clickhouse
         schema = relation_config.schema
         can_on_cluster = None
+        engine = None
         # We placed a hardcoded const (instead of importing it from dbt-core) in order to decouple the packages
         if relation_config.resource_type == NODE_TYPE_SOURCE:
             if schema == relation_config.source_name and relation_config.database:
@@ -132,5 +134,6 @@ class ClickHouseRelation(BaseRelation):
             identifier=relation_config.identifier,
             quote_policy=quote_policy,
             can_on_cluster=can_on_cluster,
+            engine=engine,
             **kwargs,
         )

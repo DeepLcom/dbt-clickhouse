@@ -5,11 +5,17 @@ from dbt.tests.util import run_dbt, run_dbt_and_capture, get_connection
 model = """
 {{
     config(
-        remote_config={'cluster': 'test_shard', 'local_db_prefix': '_', 'local_suffix': '_local'},
+        remote_config={'cluster': 'test_shard', 'local_db_prefix': '_', 'local_suffix': var('local_suffix')},
         sharding_key='key1',
+        on_schema_change='sync_all_columns'
     )
 }}
+
+{% if adapter.get_relation(this.database, this.schema, this.table) is none %}
 select toUInt64(number) as key1, toInt64(-number) as key2 from numbers(10)
+{% else %}
+select toUInt64(number) as key1, toInt64(-number) as key2 from numbers(10)
+{% endif %}
 """
 
 
@@ -33,7 +39,11 @@ class TestRemoteTableRemoteConfig:
     def test_with_remote_configuration(self, project, init_local_table):
         # the created distributed table should point to a local table as defined in the model's `remote_config`
         materialized_var = {"materialized": "remote_table"}
-        run_dbt(["run", "--vars", json.dumps(materialized_var)])
+        local_suffix_var = {"local_suffix": "_lkjashdkoljasd"}
+        run_dbt(["run", "--vars", json.dumps(materialized_var | local_suffix_var)])
+        # run twice to fix any pre-existing distributed table (schema changes, engine clause)
+        local_suffix_var = {"local_suffix": "_local"}
+        run_dbt(["run", "--vars", json.dumps(materialized_var | local_suffix_var)])
 
         project.run_sql(f"""
             insert into {project.test_schema}.remote_table
@@ -45,7 +55,7 @@ class TestRemoteTableRemoteConfig:
         self._assert_correct_data(project)
 
         # rerun (should be no-op)
-        _, log_output = run_dbt_and_capture(["run", "--vars", json.dumps(materialized_var)])
+        _, log_output = run_dbt_and_capture(["run", "--vars", json.dumps(materialized_var | local_suffix_var)])
         assert "no-op run" in log_output
 
     @staticmethod
@@ -67,7 +77,7 @@ class TestRemoteTableRemoteConfig:
     @staticmethod
     def _assert_correct_data(project):
         # query remote data from distributed table
-        result = project.run_sql("select count(*) as num_rows from remote_table", fetch="one")
+        result = project.run_sql("select count(key2) as num_rows from remote_table", fetch="one")
         assert result[0] == 10
 
 
