@@ -8,7 +8,6 @@
   {%- set target_relation = this.incorporate(type='table') -%}
   {%- set remote_relation = target_relation.incorporate(path={"identifier": remote_identifier, "schema": remote_schema}, remote_cluster=remote_cluster) -%}
   {%- set existing_relation = load_cached_relation(this) -%}
-  {{ log("engine: " ~ existing_relation.engine, info=true) }}
 
   {{ run_hooks(pre_hooks, inside_transaction=False) }}
   {{ run_hooks(pre_hooks, inside_transaction=True) }}
