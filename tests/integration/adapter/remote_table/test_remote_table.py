@@ -11,11 +11,7 @@ model = """
     )
 }}
 
-{% if adapter.get_relation(this.database, this.schema, this.table) is none %}
 select toUInt64(number) as key1, toInt64(-number) as key2 from numbers(10)
-{% else %}
-select toUInt64(number) as key1, toInt64(-number) as key2 from numbers(10)
-{% endif %}
 """
 
 
