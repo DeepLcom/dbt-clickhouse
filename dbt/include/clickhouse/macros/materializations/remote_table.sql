@@ -15,10 +15,12 @@
   {%- set column_changes = none -%}
   {%- if existing_relation -%}
     {%- set column_changes = adapter.check_incremental_schema_changes('ignore', existing_relation, sql) -%}
+    {%- set target_engine = {"cluster": remote_cluster, "database": remote_schema, "table": remote_identifier, "sharding_key": config.get("sharding_key", "rand()")} -%}
+    {%- set engine_changes = adapter.check_distributed_engine_changes(existing_relation.engine, target_engine) -%}
   {%- endif -%}
 
   {% call statement('main') %}
-    {%- if column_changes or existing_relation is none or should_full_refresh() -%}
+    {%- if column_changes or engine_changes or existing_relation is none or should_full_refresh() -%}
       {{ create_distributed_table(target_relation, remote_relation, sql) }}
     {%- else -%}
       {{ log("no-op run: distributed table exists with correct schema.", info=true) }}
