@@ -14,6 +14,9 @@
 
   {%- set column_changes = none -%}
   {%- if existing_relation -%}
+    {%- if sql is none -%}
+        {%- set sql = clickhouse__create_select_query_from_schema() -%}
+    {%- endif -%}
     {%- set column_changes = adapter.check_incremental_schema_changes('ignore', existing_relation, sql) -%}
     {%- set target_engine = {"cluster": remote_cluster, "database": remote_schema, "table": remote_identifier, "sharding_key": config.get("sharding_key", "rand()")} -%}
     {%- set engine_changes = adapter.check_distributed_engine_changes(existing_relation.engine, target_engine) -%}
