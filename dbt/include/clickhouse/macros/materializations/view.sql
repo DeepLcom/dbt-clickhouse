@@ -46,6 +46,7 @@
     {% if contract_config.enforced %}
       {{ get_assert_columns_equivalent(sql) }}
     {%- endif %}
+  as (
     {% if sql is none %}
       {{clickhouse__create_select_query_from_schema()}}
     {%- else -%}
