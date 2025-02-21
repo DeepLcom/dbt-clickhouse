@@ -52,7 +52,7 @@
   {% endcall %}
 
   {% if existing_relation_local is none %}
-    -- No existing table, simply create a new one
+    -- No existing local table, recreate local and distributed tables
     {{ create_distributed_local_table(target_relation, target_relation_local, view_relation, sql) }}
 
   {% elif full_refresh_mode %}
@@ -61,7 +61,7 @@
     {% do adapter.drop_relation(distributed_intermediate_relation) or '' %}
     {% set need_swap = true %}
 
-  {% elif inserts_only or unique_key is none -%}
+  {% elif inserts_only -%}
     -- There are no updates/deletes or duplicate keys are allowed.  Simply add all of the new rows to the existing
     -- table. It is the user's responsibility to avoid duplicates.  Note that "inserts_only" is a ClickHouse adapter
     -- specific configurable that is used to avoid creating an expensive intermediate table.
@@ -74,10 +74,10 @@
     {%- endif -%}
   {% else %}
     {% if existing_relation is none %}
-      {{ drop_relation_if_exists(existing_relation) }}
       {% do run_query(create_distributed_table(target_relation, target_relation_local)) %}
       {% set existing_relation = target_relation %}
     {% endif %}
+
     {% set incremental_strategy = adapter.calculate_incremental_strategy(config.get('incremental_strategy'))  %}
     {% set incremental_predicates = config.get('predicates', none) or config.get('incremental_predicates', none) %}
     {%- if on_schema_change != 'ignore' %}
@@ -92,6 +92,15 @@
     {% endif %}
     {% if incremental_strategy == 'delete_insert' %}
       {% do clickhouse__incremental_delete_insert(existing_relation, unique_key, incremental_predicates, True) %}
+    {% elif incremental_strategy == 'insert_overwrite' %}
+      {%- set partition_by = config.get('partition_by') -%}
+      {% if partition_by is none or partition_by|length == 0 %}
+        {% do exceptions.raise_compiler_error(incremental_strategy + ' strategy requires nonempty partition_by. Current partition_by is ' ~ partition_by) %}
+      {% endif %}
+      {% if inserts_only or unique_key is not none or incremental_predicates is not none %}
+      	{% do exceptions.raise_compiler_error(incremental_strategy + ' strategy does not support inserts_only, unique_key, and incremental predicates.') %}
+      {% endif %}
+      {% do clickhouse__incremental_insert_overwrite(existing_relation, partition_by, True) %}
     {% elif incremental_strategy == 'append' %}
       {%- if language == 'python' -%}
         {%- call statement('main', language=language) -%}

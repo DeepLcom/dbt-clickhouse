@@ -114,12 +114,17 @@ class ClickHouseRelation(BaseRelation):
         # If the database is set, and the source schema is "defaulted" to the source.name, override the
         # schema with the database instead, since that's presumably what's intended for clickhouse
         schema = relation_config.schema
+
+        cluster = quoting.credentials.cluster or ''
         can_on_cluster = None
         engine = None
         # We placed a hardcoded const (instead of importing it from dbt-core) in order to decouple the packages
         if relation_config.resource_type == NODE_TYPE_SOURCE:
             if schema == relation_config.source_name and relation_config.database:
                 schema = relation_config.database
+
+        if cluster and str(relation_config.config.get("force_on_cluster")).lower() == "true":
+            can_on_cluster = True
 
         else:
             cluster = quoting.credentials.cluster or ''

@@ -1,3 +1,78 @@
+### Release [1.8.9], 2025-02-16
+
+#### Improvements
+* It is now possible to configure a TLS client certificate using `client_cert` and `client_cert_key` profile parameters. ([#413](https://github.com/ClickHouse/dbt-clickhouse/pull/413))
+* Added Support of insert_overwrite in cluster setup with incremental and distributed_incremental materializations ([#394](https://github.com/ClickHouse/dbt-clickhouse/pull/394))
+* Improve index and projections creation process ([#421](https://github.com/ClickHouse/dbt-clickhouse/pull/421)) 
+
+#### Bugs
+* Reverted breaking changes in MV materialization ([#416](https://github.com/ClickHouse/dbt-clickhouse/pull/416))
+* A fix was introduced for distributed tables, where an incremental local table could have been dropped if the distributed table was missing. ([#363](https://github.com/ClickHouse/dbt-clickhouse/pull/363))
+
+
+### Release [1.8.8], 2025-02-05
+### Improvements
+* Materialized view now attempts to use `ALTER TABLE...MODIFY QUERY` to update existing materialized views. This is an atomic operation so data is not lost. ([#390](https://github.com/ClickHouse/dbt-clickhouse/pull/390))
+* Make view materialization updates atomic. ([#412](https://github.com/ClickHouse/dbt-clickhouse/pull/412))
+* Create a black list settings to ignore based on the configured Engine. ([#367](https://github.com/ClickHouse/dbt-clickhouse/pull/367))
+
+#### New Features
+* [ClickHouse indexes](https://clickhouse.com/docs/en/optimize/sparse-primary-indexes) are now fully supported for `table` materialization.
+
+
+#### New Features
+* [ClickHouse indexes](https://clickhouse.com/docs/en/optimize/sparse-primary-indexes) are now fully supported for `table` materialization.
+The index config should be added to the model config. for instance: 
+  ```python
+  {{ config(
+         materialized='%s',
+         indexes=[{
+            'name': 'your_index_name',
+            'definition': 'your_column TYPE minmax GRANULARITY 2'
+         }]
+  ) }}
+  ```
+ 
+### Release [1.8.7], 2025-01-05
+
+### New Features
+* Added support for [refreshable materialized view](https://clickhouse.com/docs/en/materialized-view/refreshable-materialized-view) ([#401](https://github.com/ClickHouse/dbt-clickhouse/pull/401))
+
+### Improvement
+* Avoid potential data loss by using `CREATE OR REPLACE DICTIONARY` to atomically update a dictionary ([#393](https://github.com/ClickHouse/dbt-clickhouse/pull/393))
+* Removed support in python 3.8 as it is no longer supported by dbt ([#402](https://github.com/ClickHouse/dbt-clickhouse/pull/402)
+
+### Bug Fixes
+* Fix a minor bug related to validating existence of an old hanging mv ([#396]()) 
+
+### Release [1.8.6], 2024-12-05
+
+### Improvement
+* Today, on mv model creation, the target table is being populated with the historical data based on the query provided in the mv creation. This catchup mechanism is now behind a config flag and enabled by default (as is today). ([#399](https://github.com/ClickHouse/dbt-clickhouse/pull/399))
+
+
+### Release [1.8.5], 2024-11-19
+
+### New Features
+* Added support for the creation of more than one materialized view inserting records into the same target table. ([#360](https://github.com/ClickHouse/dbt-clickhouse/pull/364))
+
+### Improvement
+* Added support for [range_hashed](https://clickhouse.com/docs/en/sql-reference/dictionaries#range_hashed) and [complex_key_range_hashed](https://clickhouse.com/docs/en/sql-reference/dictionaries#complex_key_range_hashed) layouts to the dictionary materialization. ([#361](https://github.com/ClickHouse/dbt-clickhouse/pull/361))
+* Truncated stack trace for database errors for cleaner output when HIDE_STACK_TRACE variable is set to any value. ([#382](https://github.com/ClickHouse/dbt-clickhouse/pull/382))
+* It is now possible to pass query settings not only on table creation but also on query. ([#362](https://github.com/ClickHouse/dbt-clickhouse/pull/362))
+
+
+### Bug Fixes
+* Before this version, `split_part` macro used to add an extra quotation. that was fixed in ([#338](https://github.com/ClickHouse/dbt-clickhouse/pull/338))
+
+### Bug Fixes
+* Existing local tables are no longer dropped/recreated in case of missing distributed tables in `distributed_incremental` materialization mode. ([#363](https://github.com/ClickHouse/dbt-clickhouse/pull/363))
+
+### Release [1.8.4], 2024-09-17
+### Improvement
+* The S3 help macro now support a `role_arn` parameter as an alternative way to provide authentication for S3 based models.  Thanks to
+[Mitchell Bregman](https://github.com/mitchbregs) for the contribution!
+
 ### Release [1.8.3], 2024-09-01
 ### Bug Fixes
 * An [issue](https://github.com/ClickHouse/dbt-clickhouse/issues/348) was detected when using multiple projections. We solved it and added a test to cover that use case. ([#349](https://github.com/ClickHouse/dbt-clickhouse/pull/349))
