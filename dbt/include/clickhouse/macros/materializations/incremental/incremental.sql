@@ -266,7 +266,7 @@
     {{ drop_relation_if_exists(distributed_new_data_relation) }}
 {% endmacro %}
 
-{% macro clickhouse__incremental_insert_overwrite(existing_relation, intermediate_relation, partition_by) %}
+{% macro clickhouse__incremental_insert_overwrite(existing_relation, partition_by, is_distributed=False) %}
     {%- set new_data_relation = make_intermediate_relation(existing_relation, '__dbt_new_data') -%}
     {{ drop_relation_if_exists(new_data_relation) }}
     {%- set distributed_new_data_relation = existing_relation.incorporate(path={"identifier": existing_relation.identifier + '__dbt_distributed_new_data'}) -%}
