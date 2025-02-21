@@ -24,16 +24,9 @@ jobs:
     strategy:
       matrix:
         python-version:
-          - '3.9'
-          - '3.10'
           - '3.11'
-          - '3.12'
         clickhouse-version:
-          - '23.8'
-          - '24.1'
-          - '24.2'
-          - '24.3'
-          - latest
+          - '24.12'
 
     steps:
       - name: Checkout
