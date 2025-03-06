@@ -9,9 +9,6 @@
   {%- set remote_relation = target_relation.incorporate(path={"identifier": remote_identifier, "schema": remote_schema}, remote_cluster=remote_cluster) -%}
   {%- set existing_relation = load_cached_relation(this) -%}
 
-  {{ run_hooks(pre_hooks, inside_transaction=False) }}
-  {{ run_hooks(pre_hooks, inside_transaction=True) }}
-
   {%- set column_changes = none -%}
   {%- if existing_relation -%}
     {%- if sql is none -%}
@@ -36,9 +33,7 @@
   {% do apply_grants(target_relation, grant_config, should_revoke=should_revoke) %}
   {% do persist_docs(target_relation, model) %}
 
-  {{ run_hooks(post_hooks, inside_transaction=True) }}
   {{ adapter.commit() }}
-  {{ run_hooks(post_hooks, inside_transaction=False) }}
   {{ return({'relations': [target_relation]}) }}
 
 {% endmaterialization %}
