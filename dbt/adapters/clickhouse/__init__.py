@@ -18,6 +18,11 @@ Plugin = AdapterPlugin(
 
 
 def get_materialization(self):
+    """
+    Aliases `materialized` config `incremental` or `table` in combination with `is_distributed` model config set to true
+    to `distributed_incremental` or `distributed_table` respectively. This is required for compatibility of dbt-core
+    microbatch functionalities with distributed models.
+    """
     flags = get_flags()
     materialized = flags.vars.get('materialized') or self.config.materialized
     is_distributed = self.config.extra.get('is_distributed')
