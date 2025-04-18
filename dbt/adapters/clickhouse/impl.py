@@ -495,7 +495,7 @@ class ClickHouseAdapter(SQLAdapter):
                     """
 
     @available
-    def get_model_query_settings(self, model, additional_settings: dict = None):
+    def get_model_query_settings(self, model, additional_settings: Optional[dict] = None):
         settings = model['config'].get('query_settings', {})
         if additional_settings:
             settings = {**settings, **additional_settings}
