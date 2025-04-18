@@ -50,6 +50,7 @@
   {% call statement('main') %}
     {{ create_view_as(view_relation, sql) }}
   {% endcall %}
+  {% do to_drop.append(view_relation) %}
 
   {% if existing_relation_local is none %}
     -- No existing table, simply create a new one
@@ -79,7 +80,9 @@
       {% set existing_relation = target_relation %}
     {% endif %}
     {% set incremental_strategy = adapter.calculate_incremental_strategy(config.get('incremental_strategy'))  %}
-    {% set incremental_predicates = config.get('predicates', none) or config.get('incremental_predicates', none) %}
+    {% set incremental_predicates = config.get('predicates', []) or config.get('incremental_predicates', []) %}
+    {% set partition_by = config.get('partition_by') %}
+    {% do adapter.validate_incremental_strategy(incremental_strategy, incremental_predicates, unique_key, partition_by) %}
     {%- if on_schema_change != 'ignore' %}
       {%- set local_column_changes = adapter.check_incremental_schema_changes(on_schema_change, existing_relation_local, sql) -%}
       {% if local_column_changes %}
@@ -87,10 +90,15 @@
         {% set existing_relation = load_cached_relation(this) %}
       {% endif %}
     {% endif %}
-    {% if incremental_strategy != 'delete_insert' and incremental_predicates %}
-      {% do exceptions.raise_compiler_error('Cannot apply incremental predicates with ' + incremental_strategy + ' strategy.') %}
-    {% endif %}
     {% if incremental_strategy == 'delete_insert' %}
+      {% do clickhouse__incremental_delete_insert(existing_relation, unique_key, incremental_predicates, True) %}
+    {% elif incremental_strategy == 'microbatch' %}
+      {%- if config.get("__dbt_internal_microbatch_event_time_start") -%}
+        {% do incremental_predicates.append(config.get("event_time") ~ " >= toDateTime('" ~ config.get("__dbt_internal_microbatch_event_time_start").strftime("%Y-%m-%d %H:%M:%S") ~ "')") %}
+      {%- endif -%}
+      {%- if model.config.__dbt_internal_microbatch_event_time_end -%}
+        {% do incremental_predicates.append(config.get("event_time") ~ " < toDateTime('" ~ config.get("__dbt_internal_microbatch_event_time_end").strftime("%Y-%m-%d %H:%M:%S") ~ "')") %}
+      {%- endif -%}
       {% do clickhouse__incremental_delete_insert(existing_relation, unique_key, incremental_predicates, True) %}
     {% elif incremental_strategy == 'append' %}
       {%- if language == 'python' -%}
@@ -134,8 +142,6 @@
       {% do to_drop.append(distributed_backup_relation) %}
   {% endif %}
 
-  {{ drop_relation_if_exists(view_relation) }}
-
   {% set should_revoke = should_revoke(existing_relation, full_refresh_mode) %}
   {% do apply_grants(target_relation, grant_config, should_revoke=should_revoke) %}
   {% do apply_grants(target_relation_local, grant_config, should_revoke=should_revoke) %}
@@ -156,6 +162,6 @@
 
   {{ run_hooks(post_hooks, inside_transaction=False) }}
 
-  {{ return({'relations': [target_relation]}) }}
+  {{ return({'relations': [target_relation, target_relation_local]}) }}
 
 {%- endmaterialization %}

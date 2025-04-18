@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Type
+from typing import Any, Optional, Type
 
-from dbt.adapters.base.relation import BaseRelation, Path, Policy, Self
+from dbt.adapters.base.relation import BaseRelation, EventTimeFilter, Path, Policy, Self
 from dbt.adapters.contracts.relation import HasQuoting, RelationConfig
 from dbt_common.dataclass_schema import StrEnum
 from dbt_common.exceptions import DbtRuntimeError
@@ -55,6 +55,20 @@ class ClickHouseRelation(BaseRelation):
     def render(self) -> str:
         return ".".join(quote_identifier(part) for _, part in self._render_iterator() if part)
 
+    def _render_event_time_filtered(self, event_time_filter: EventTimeFilter) -> str:
+        """
+        Returns "" if start and end are both None
+        """
+        filter = ""
+        if event_time_filter.start and event_time_filter.end:
+            filter = f"{event_time_filter.field_name} >= '{event_time_filter.start.strftime('%Y-%m-%d %H:%M:%S')}' and {event_time_filter.field_name} < '{event_time_filter.end.strftime('%Y-%m-%d %H:%M:%S')}'"
+        elif event_time_filter.start:
+            filter = f"{event_time_filter.field_name} >= '{event_time_filter.start.strftime('%Y-%m-%d %H:%M:%S')}'"
+        elif event_time_filter.end:
+            filter = f"{event_time_filter.field_name} < '{event_time_filter.end.strftime('%Y-%m-%d %H:%M:%S')}'"
+
+        return filter
+
     def derivative(self, suffix: str, relation_type: Optional[str] = None) -> BaseRelation:
         path = Path(schema=self.path.schema, database='', identifier=self.path.identifier + suffix)
         derivative_type = ClickHouseRelationType(relation_type) if relation_type else self.type
@@ -80,7 +94,7 @@ class ClickHouseRelation(BaseRelation):
 
     @classmethod
     def get_on_cluster(
-        cls: Type[Self], cluster: str = '', materialized: str = '', engine: str = '', database_engine: str = ''
+        cls: Type[Self], cluster: str = '', materialized: str = '', is_distributed: bool = False, engine: str = '', database_engine: str = ''
     ) -> bool:
         if 'replicated' in database_engine.lower():
             return False
@@ -88,6 +102,7 @@ class ClickHouseRelation(BaseRelation):
             return (
                 materialized in ('view', 'dictionary')
                 or 'distributed' in materialized
+                or is_distributed
                 or 'Replicated' in engine
             )
         return False
@@ -124,9 +139,10 @@ class ClickHouseRelation(BaseRelation):
         else:
             cluster = quoting.credentials.cluster or ''
             materialized = relation_config.config.get('materialized', '')
+            is_distributed = relation_config.config.get('extra', {}).get('is_distributed')
             engine = relation_config.config.get('engine', '')
             database_engine = quoting.credentials.database_engine or ''
-            can_on_cluster = cls.get_on_cluster(cluster, materialized, engine, database_engine)
+            can_on_cluster = cls.get_on_cluster(cluster, materialized, is_distributed, engine, database_engine)
 
         return cls.create(
             database='',
