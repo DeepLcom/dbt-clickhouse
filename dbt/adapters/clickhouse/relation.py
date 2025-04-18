@@ -94,7 +94,12 @@ class ClickHouseRelation(BaseRelation):
 
     @classmethod
     def get_on_cluster(
-        cls: Type[Self], cluster: str = '', materialized: str = '', is_distributed: bool = False, engine: str = '', database_engine: str = ''
+        cls: Type[Self],
+        cluster: str = '',
+        materialized: str = '',
+        is_distributed: bool = False,
+        engine: str = '',
+        database_engine: str = '',
     ) -> bool:
         if 'replicated' in database_engine.lower():
             return False
@@ -142,7 +147,9 @@ class ClickHouseRelation(BaseRelation):
             is_distributed = relation_config.config.get('extra', {}).get('is_distributed')
             engine = relation_config.config.get('engine', '')
             database_engine = quoting.credentials.database_engine or ''
-            can_on_cluster = cls.get_on_cluster(cluster, materialized, is_distributed, engine, database_engine)
+            can_on_cluster = cls.get_on_cluster(
+                cluster, materialized, is_distributed, engine, database_engine
+            )
 
         return cls.create(
             database='',

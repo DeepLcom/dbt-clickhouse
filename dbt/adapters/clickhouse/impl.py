@@ -166,10 +166,18 @@ class ClickHouseAdapter(SQLAdapter):
         return ch_db and ch_db.engine in ('Atomic', 'Replicated')
 
     @available.parse_none
-    def should_on_cluster(self, materialized: str = '', is_distributed: bool = False, engine: str = '') -> bool:
+    def should_on_cluster(
+        self, materialized: str = '', is_distributed: bool = False, engine: str = ''
+    ) -> bool:
         conn = self.connections.get_if_exists()
         if conn and conn.credentials.cluster:
-            return ClickHouseRelation.get_on_cluster(conn.credentials.cluster, materialized, is_distributed, engine, conn.credentials.database_engine)
+            return ClickHouseRelation.get_on_cluster(
+                conn.credentials.cluster,
+                materialized,
+                is_distributed,
+                engine,
+                conn.credentials.database_engine,
+            )
         return ClickHouseRelation.get_on_cluster('', materialized, is_distributed, engine)
 
     @available.parse_none
@@ -182,11 +190,11 @@ class ClickHouseAdapter(SQLAdapter):
 
     @available.parse_none
     def validate_incremental_strategy(
-            self,
-            strategy: str,
-            predicates: list,
-            unique_key: str,
-            partition_by: str,
+        self,
+        strategy: str,
+        predicates: list,
+        unique_key: str,
+        partition_by: str,
     ) -> None:
         conn = self.connections.get_if_exists()
         if strategy not in ('legacy', 'append', 'delete_insert', 'insert_overwrite', 'microbatch'):
@@ -241,9 +249,7 @@ class ClickHouseAdapter(SQLAdapter):
                 changed_data_types.append(column)
         #  change column type from Nullable([dtype]) to [dtype] will fail when the column has NULL values
         if unsafe_nullable_changes:
-            raise DbtRuntimeError(
-                schema_change_datatype_error.format(unsafe_nullable_changes)
-            )
+            raise DbtRuntimeError(schema_change_datatype_error.format(unsafe_nullable_changes))
         clickhouse_column_changes = ClickHouseColumnChanges(
             columns_to_add=target_not_in_source,
             columns_to_drop=source_not_in_target,
@@ -261,7 +267,9 @@ class ClickHouseAdapter(SQLAdapter):
         return clickhouse_column_changes
 
     @available.parse_none
-    def check_distributed_engine_changes(self, engine_clause: Optional[str], target_engine: dict) -> bool:
+    def check_distributed_engine_changes(
+        self, engine_clause: Optional[str], target_engine: dict
+    ) -> bool:
         if not engine_clause:
             return True
 
@@ -273,10 +281,10 @@ class ClickHouseAdapter(SQLAdapter):
         match = re.match(pattern, engine_clause)
         if match:
             existing_engine = dict(
-                cluster = match.group(1),
-                database = match.group(2),
-                table = match.group(3),
-                sharding_key = match.group(4)
+                cluster=match.group(1),
+                database=match.group(2),
+                table=match.group(3),
+                sharding_key=match.group(4),
             )
             return existing_engine != target_engine
 
@@ -380,7 +388,7 @@ class ClickHouseAdapter(SQLAdapter):
                 type=rel_type,
                 can_exchange=can_exchange,
                 can_on_cluster=can_on_cluster,
-                engine=engine
+                engine=engine,
             )
             relations.append(relation)
 
@@ -557,6 +565,7 @@ class ClickHouseAdapter(SQLAdapter):
                 raise DbtRuntimeError("CHECK Constraint 'name' is required")
             return f"CONSTRAINT {constraint.name} CHECK ({constraint.expression})"
         return None
+
 
 @dataclass
 class ClickHouseDatabase:
