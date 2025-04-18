@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Union
 
-from dbt.adapters.contracts.connection import Credentials
 from dbt_common.exceptions import DbtRuntimeError
+
+from dbt.adapters.contracts.connection import Credentials
 
 
 @dataclass

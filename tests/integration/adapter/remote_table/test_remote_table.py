@@ -1,6 +1,7 @@
 import json
+
 import pytest
-from dbt.tests.util import run_dbt, run_dbt_and_capture, get_connection
+from dbt.tests.util import get_connection, run_dbt, run_dbt_and_capture
 
 model = """
 {{

@@ -1,5 +1,6 @@
 import csv
 import io
+import re
 from dataclasses import dataclass
 from multiprocessing.context import SpawnContext
 from typing import (
@@ -15,31 +16,27 @@ from typing import (
     Tuple,
     Union,
 )
-import re
 
-from dbt.adapters.base import AdapterConfig, available
-from dbt.adapters.base.impl import BaseAdapter, ConstraintSupport
-from dbt.adapters.base.relation import BaseRelation, InformationSchema
-from dbt.adapters.capability import Capability, CapabilityDict, CapabilitySupport, Support
-from dbt.adapters.contracts.relation import Path, RelationConfig
-from dbt.adapters.events.types import ConstraintNotSupported
-from dbt.adapters.sql import SQLAdapter
 from dbt_common.contracts.constraints import ConstraintType, ModelLevelConstraint
 from dbt_common.events.functions import warn_or_error
 from dbt_common.exceptions import DbtInternalError, DbtRuntimeError, NotImplementedError
 from dbt_common.utils import filter_null_values
 
+from dbt.adapters.base import AdapterConfig, available
+from dbt.adapters.base.impl import BaseAdapter, ConstraintSupport
+from dbt.adapters.base.relation import BaseRelation, InformationSchema
+from dbt.adapters.capability import Capability, CapabilityDict, CapabilitySupport, Support
 from dbt.adapters.clickhouse.cache import ClickHouseRelationsCache
 from dbt.adapters.clickhouse.column import ClickHouseColumn, ClickHouseColumnChanges
 from dbt.adapters.clickhouse.connections import ClickHouseConnectionManager
-from dbt.adapters.clickhouse.errors import (
-    schema_change_datatype_error,
-    schema_change_fail_error,
-)
+from dbt.adapters.clickhouse.errors import schema_change_datatype_error, schema_change_fail_error
 from dbt.adapters.clickhouse.logger import logger
 from dbt.adapters.clickhouse.query import quote_identifier
 from dbt.adapters.clickhouse.relation import ClickHouseRelation, ClickHouseRelationType
 from dbt.adapters.clickhouse.util import compare_versions
+from dbt.adapters.contracts.relation import Path, RelationConfig
+from dbt.adapters.events.types import ConstraintNotSupported
+from dbt.adapters.sql import SQLAdapter
 
 if TYPE_CHECKING:
     import agate

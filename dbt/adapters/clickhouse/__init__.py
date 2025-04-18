@@ -1,16 +1,14 @@
-from typing import Optional, Type
+from dbt.contracts.graph.nodes import BaseNode
+from dbt.flags import get_flags
 
 from dbt.adapters.base import AdapterPlugin
-
 from dbt.adapters.clickhouse.column import ClickHouseColumn  # noqa
 from dbt.adapters.clickhouse.connections import ClickHouseConnectionManager  # noqa
 from dbt.adapters.clickhouse.credentials import ClickHouseCredentials
 from dbt.adapters.clickhouse.impl import ClickHouseAdapter
-from dbt.adapters.clickhouse.relation import ClickHouseRelation  # noqa
-from dbt.contracts.graph.nodes import BaseNode
-from dbt.flags import get_flags
-from dbt.include import clickhouse  # noqa
 from dbt.adapters.clickhouse.logger import logger
+from dbt.adapters.clickhouse.relation import ClickHouseRelation  # noqa
+from dbt.include import clickhouse  # noqa
 
 Plugin = AdapterPlugin(
     adapter=ClickHouseAdapter,
