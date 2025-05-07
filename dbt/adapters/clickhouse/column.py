@@ -2,8 +2,9 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, List, Literal, TypeVar
 
-from dbt.adapters.base.column import Column
 from dbt_common.exceptions import DbtRuntimeError
+
+from dbt.adapters.base.column import Column
 
 Self = TypeVar('Self', bound='ClickHouseColumn')
 

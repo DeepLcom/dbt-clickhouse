@@ -1,5 +1,6 @@
 import csv
 import io
+import re
 from dataclasses import dataclass
 from multiprocessing.context import SpawnContext
 from typing import (
@@ -15,34 +16,27 @@ from typing import (
     Tuple,
     Union,
 )
-import re
+
+from dbt_common.contracts.constraints import ConstraintType, ModelLevelConstraint
+from dbt_common.events.functions import warn_or_error
+from dbt_common.exceptions import DbtInternalError, DbtRuntimeError, NotImplementedError
+from dbt_common.utils import filter_null_values
 
 from dbt.adapters.base import AdapterConfig, available
 from dbt.adapters.base.impl import BaseAdapter, ConstraintSupport
 from dbt.adapters.base.relation import BaseRelation, InformationSchema
 from dbt.adapters.capability import Capability, CapabilityDict, CapabilitySupport, Support
-from dbt.adapters.contracts.relation import Path, RelationConfig
-from dbt.adapters.events.types import ConstraintNotSupported
-from dbt.adapters.sql import SQLAdapter
-from dbt_common.contracts.constraints import ConstraintType, ModelLevelConstraint
-from dbt_common.events.functions import warn_or_error
-from dbt_common.exceptions import DbtInternalError, DbtRuntimeError, NotImplementedError
-from dbt_common.utils import filter_null_values
-from dbt.contracts.graph.nodes import BaseNode
-from dbt.flags import get_flags
-
 from dbt.adapters.clickhouse.cache import ClickHouseRelationsCache
 from dbt.adapters.clickhouse.column import ClickHouseColumn, ClickHouseColumnChanges
 from dbt.adapters.clickhouse.connections import ClickHouseConnectionManager
-from dbt.adapters.clickhouse.errors import (
-    schema_change_datatype_error,
-    schema_change_fail_error,
-    schema_change_missing_source_error,
-)
+from dbt.adapters.clickhouse.errors import schema_change_datatype_error, schema_change_fail_error
 from dbt.adapters.clickhouse.logger import logger
 from dbt.adapters.clickhouse.query import quote_identifier
 from dbt.adapters.clickhouse.relation import ClickHouseRelation, ClickHouseRelationType
 from dbt.adapters.clickhouse.util import compare_versions
+from dbt.adapters.contracts.relation import Path, RelationConfig
+from dbt.adapters.events.types import ConstraintNotSupported
+from dbt.adapters.sql import SQLAdapter
 
 if TYPE_CHECKING:
     import agate
@@ -169,11 +163,19 @@ class ClickHouseAdapter(SQLAdapter):
         return ch_db and ch_db.engine in ('Atomic', 'Replicated')
 
     @available.parse_none
-    def should_on_cluster(self, materialized: str = '', engine: str = '') -> bool:
+    def should_on_cluster(
+        self, materialized: str = '', is_distributed: bool = False, engine: str = ''
+    ) -> bool:
         conn = self.connections.get_if_exists()
         if conn and conn.credentials.cluster:
-            return ClickHouseRelation.get_on_cluster(conn.credentials.cluster, materialized, engine, conn.credentials.database_engine)
-        return ClickHouseRelation.get_on_cluster('', materialized, engine)
+            return ClickHouseRelation.get_on_cluster(
+                conn.credentials.cluster,
+                materialized,
+                is_distributed,
+                engine,
+                conn.credentials.database_engine,
+            )
+        return ClickHouseRelation.get_on_cluster('', materialized, is_distributed, engine)
 
     @available.parse_none
     def calculate_incremental_strategy(self, strategy: str) -> str:
@@ -181,16 +183,37 @@ class ClickHouseAdapter(SQLAdapter):
         if not strategy or strategy == 'default':
             strategy = 'delete_insert' if conn.handle.use_lw_deletes else 'legacy'
         strategy = strategy.replace('+', '_')
-        if strategy not in ['legacy', 'append', 'delete_insert', 'insert_overwrite']:
-            raise DbtRuntimeError(
-                f"The incremental strategy '{strategy}' is not valid for ClickHouse"
-            )
-        if not conn.handle.has_lw_deletes and strategy == 'delete_insert':
-            logger.warning(
-                'Lightweight deletes are not available, using legacy ClickHouse strategy'
-            )
-            strategy = 'legacy'
         return strategy
+
+    @available.parse_none
+    def validate_incremental_strategy(
+        self,
+        strategy: str,
+        predicates: list,
+        unique_key: str,
+        partition_by: str,
+    ) -> None:
+        conn = self.connections.get_if_exists()
+        if strategy not in ('legacy', 'append', 'delete_insert', 'insert_overwrite', 'microbatch'):
+            raise DbtRuntimeError(
+                f"The incremental strategy '{strategy}' is not valid for ClickHouse."
+            )
+        if strategy in ('delete_insert', 'microbatch') and not conn.handle.has_lw_deletes:
+            raise DbtRuntimeError(
+                f"'{strategy}' strategy requires setting the profile config 'use_lw_deletes' to true."
+            )
+        if strategy in ('delete_insert', 'microbatch') and not unique_key:
+            raise DbtRuntimeError(f"'{strategy}' strategy requires a non-empty 'unique_key'.")
+        if strategy not in ('delete_insert', 'microbatch') and predicates:
+            raise DbtRuntimeError(
+                f"Cannot apply incremental predicates with '{strategy}' strategy."
+            )
+        if strategy == 'insert_overwrite' and not partition_by:
+            raise DbtRuntimeError(
+                f"'{strategy}' strategy requires non-empty 'partition_by'. Current partition_by is {partition_by}."
+            )
+        if strategy == 'insert_overwrite' and unique_key:
+            raise DbtRuntimeError(f"'{strategy}' strategy does not support unique_key.")
 
     @available.parse_none
     def check_incremental_schema_changes(
@@ -223,9 +246,7 @@ class ClickHouseAdapter(SQLAdapter):
                 changed_data_types.append(column)
         #  change column type from Nullable([dtype]) to [dtype] will fail when the column has NULL values
         if unsafe_nullable_changes:
-            raise DbtRuntimeError(
-                schema_change_datatype_error.format(unsafe_nullable_changes)
-            )
+            raise DbtRuntimeError(schema_change_datatype_error.format(unsafe_nullable_changes))
         clickhouse_column_changes = ClickHouseColumnChanges(
             columns_to_add=target_not_in_source,
             columns_to_drop=source_not_in_target,
@@ -243,7 +264,9 @@ class ClickHouseAdapter(SQLAdapter):
         return clickhouse_column_changes
 
     @available.parse_none
-    def check_distributed_engine_changes(self, engine_clause: Optional[str], target_engine: dict) -> bool:
+    def check_distributed_engine_changes(
+        self, engine_clause: Optional[str], target_engine: dict
+    ) -> bool:
         if not engine_clause:
             return True
 
@@ -255,10 +278,10 @@ class ClickHouseAdapter(SQLAdapter):
         match = re.match(pattern, engine_clause)
         if match:
             existing_engine = dict(
-                cluster = match.group(1),
-                database = match.group(2),
-                table = match.group(3),
-                sharding_key = match.group(4)
+                cluster=match.group(1),
+                database=match.group(2),
+                table=match.group(3),
+                sharding_key=match.group(4),
             )
             return existing_engine != target_engine
 
@@ -362,7 +385,7 @@ class ClickHouseAdapter(SQLAdapter):
                 type=rel_type,
                 can_exchange=can_exchange,
                 can_on_cluster=can_on_cluster,
-                engine=engine
+                engine=engine,
             )
             relations.append(relation)
 
@@ -413,41 +436,6 @@ class ClickHouseAdapter(SQLAdapter):
 
             catalog = catalog.where(in_map)
         return catalog, exceptions
-
-    def get_rows_different_sql(
-        self,
-        relation_a: ClickHouseRelation,
-        relation_b: ClickHouseRelation,
-        column_names: Optional[List[str]] = None,
-        except_operator: Optional[str] = None,
-    ) -> str:
-        names: List[str]
-        if column_names is None:
-            columns = self.get_columns_in_relation(relation_a)
-            names = sorted((self.quote(c.name) for c in columns))
-        else:
-            names = sorted((self.quote(n) for n in column_names))
-
-        alias_a = 'ta'
-        alias_b = 'tb'
-        columns_csv_a = ', '.join([f'{alias_a}.{name}' for name in names])
-        columns_csv_b = ', '.join([f'{alias_b}.{name}' for name in names])
-        join_condition = ' AND '.join([f'{alias_a}.{name} = {alias_b}.{name}' for name in names])
-        first_column = names[0]
-
-        # Clickhouse doesn't have an EXCEPT operator
-        sql = COLUMNS_EQUAL_SQL.format(
-            alias_a=alias_a,
-            alias_b=alias_b,
-            first_column=first_column,
-            columns_a=columns_csv_a,
-            columns_b=columns_csv_b,
-            join_condition=join_condition,
-            relation_a=str(relation_a),
-            relation_b=str(relation_b),
-        )
-
-        return sql
 
     def update_column_sql(
         self,
@@ -507,7 +495,7 @@ class ClickHouseAdapter(SQLAdapter):
                     """
 
     @available
-    def get_model_query_settings(self, model, additional_settings: dict = None):
+    def get_model_query_settings(self, model, additional_settings: Optional[dict] = None):
         settings = model['config'].get('query_settings', {})
         if additional_settings:
             settings = {**settings, **additional_settings}
@@ -583,16 +571,6 @@ class ClickHouseDatabase:
     comment: str
 
 
-
-def get_materialization(self):
-    flags = get_flags()
-    materialized = flags.vars.get('materialized')
-    return materialized or self.config.materialized
-
-# patches a BaseNode method to allow setting `materialized` config overrides via dbt flags
-BaseNode.get_materialization = get_materialization
-
-
 def _expect_row_value(key: str, row: "agate.Row"):
     if key not in row.keys():
         raise DbtInternalError(f'Got a row without \'{key}\' column, columns: {row.keys()}')
@@ -616,35 +594,3 @@ def _catalog_filter_schemas(
         return (table_database, table_schema) in schemas
 
     return test
-
-
-COLUMNS_EQUAL_SQL = '''
-SELECT
-    row_count_diff.difference as row_count_difference,
-    diff_count.num_missing as num_mismatched
-FROM (
-    SELECT
-        1 as id,
-        (SELECT COUNT(*) as num_rows FROM {relation_a}) -
-        (SELECT COUNT(*) as num_rows FROM {relation_b}) as difference
-    ) as row_count_diff
-INNER JOIN (
-    SELECT
-        1 as id,
-        COUNT(*) as num_missing FROM (
-            SELECT
-                {columns_a}
-            FROM {relation_a} as {alias_a}
-            LEFT OUTER JOIN {relation_b} as {alias_b}
-                ON {join_condition}
-            WHERE {alias_b}.{first_column} IS NULL
-            UNION ALL
-            SELECT
-                {columns_b}
-            FROM {relation_b} as {alias_b}
-            LEFT OUTER JOIN {relation_a} as {alias_a}
-                ON {join_condition}
-            WHERE {alias_a}.{first_column} IS NULL
-        ) as missing
-    ) as diff_count ON row_count_diff.id = diff_count.id
-'''.strip()

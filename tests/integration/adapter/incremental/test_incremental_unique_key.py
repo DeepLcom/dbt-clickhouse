@@ -35,6 +35,9 @@ union all
 select 'NY','New York','Manhattan',toDate('2021-04-01')
 union all
 select 'PA','Philadelphia','Philadelphia',toDate('2021-05-21')
+union all
+select 'CO','Denver','',toDate('2021-06-18')
+
 """
 
 
@@ -60,6 +63,8 @@ union all
 select 'NY','New York','Manhattan',toDate('2021-04-01')
 union all
 select 'PA','Philadelphia','Philadelphia',toDate('2021-05-21')
+union all
+select 'CO','Denver','',toDate('2021-06-18')
 
 """
 

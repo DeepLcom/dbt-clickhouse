@@ -56,6 +56,7 @@ class TestSimpleDistributedIncremental:
         run_dbt(["run", "--select", "unique_source_one"])
         run_dbt(["run", "--select", "unique_incremental_one"])
 
+
 lw_delete_inc = """
 {{ config(
         materialized='distributed_incremental',
@@ -114,7 +115,9 @@ SELECT 1 as key, toDate('2024-10-21') as date
 """
 
 
-@pytest.mark.skipif(os.environ.get('DBT_CH_TEST_CLUSTER', '').strip() == '', reason='Not on a cluster')
+@pytest.mark.skipif(
+    os.environ.get('DBT_CH_TEST_CLUSTER', '').strip() == '', reason='Not on a cluster'
+)
 class TestLWDeleteDistributedIncremental:
     @pytest.fixture(scope="class")
     def models(self):
@@ -152,7 +155,8 @@ class TestLWDeleteDistributedIncremental:
     )
     def test_lw_delete_unique_key(self, project, model, delete_filter_log):
         """Assure that the delete_filter in `DELETE FROM <table> WHERE <unique_key> IN (<delete_filter>)` is templated
-        by a string of unique key value(s) when there is only one value (combination) for the unique key(s)."""
+        by a string of unique key value(s) when there is only one value (combination) for the unique key(s).
+        """
         run_dbt(["run", "--select", model])
         _, log = run_dbt_and_capture(["run", "--select", model, "--log-level", "debug"])
         result = project.run_sql(f"select count(*) as num_rows from {model}", fetch="one")
