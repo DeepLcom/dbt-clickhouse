@@ -51,7 +51,7 @@
     {{ adapter.get_model_query_settings(model) }}
   )
       {% if model.get('config').get('materialized') == 'view' %}
-      {{ adapter.get_model_settings(model, config.get('engine', default='MergeTree')) }}
+      {{ adapter.get_model_settings(model) }}
     {%- endif %}
 
 {%- endmacro %}
