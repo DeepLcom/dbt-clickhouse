@@ -1,13 +1,13 @@
 from dataclasses import dataclass, field
 from typing import Any, Optional, Type
 
+from dbt.adapters.base.relation import BaseRelation, EventTimeFilter, Path, Policy, Self
+from dbt.adapters.contracts.relation import HasQuoting, RelationConfig
 from dbt_common.dataclass_schema import StrEnum
 from dbt_common.exceptions import DbtRuntimeError
 from dbt_common.utils import deep_merge
 
-from dbt.adapters.base.relation import BaseRelation, EventTimeFilter, Path, Policy, Self
 from dbt.adapters.clickhouse.query import quote_identifier
-from dbt.adapters.contracts.relation import HasQuoting, RelationConfig
 
 NODE_TYPE_SOURCE = 'source'
 
@@ -44,8 +44,6 @@ class ClickHouseRelation(BaseRelation):
     quote_character: str = '`'
     can_exchange: bool = False
     can_on_cluster: bool = False
-    remote_cluster: Optional[str] = None
-    engine: Optional[str] = None
 
     def __post_init__(self):
         if self.database != self.schema and self.database:
@@ -72,7 +70,9 @@ class ClickHouseRelation(BaseRelation):
     def derivative(self, suffix: str, relation_type: Optional[str] = None) -> BaseRelation:
         path = Path(schema=self.path.schema, database='', identifier=self.path.identifier + suffix)
         derivative_type = ClickHouseRelationType(relation_type) if relation_type else self.type
-        return ClickHouseRelation(type=derivative_type, path=path)
+        return ClickHouseRelation(
+            type=derivative_type, path=path, can_on_cluster=self.can_on_cluster
+        )
 
     def matches(
         self,
@@ -96,21 +96,13 @@ class ClickHouseRelation(BaseRelation):
     def get_on_cluster(
         cls: Type[Self],
         cluster: str = '',
-        materialized: str = '',
-        is_distributed: bool = False,
-        engine: str = '',
         database_engine: str = '',
     ) -> bool:
-        if 'replicated' in database_engine.lower():
+        # not using ternary expression for simplicity
+        if not cluster.strip() or 'replicated' in database_engine.lower():
             return False
-        if cluster.strip():
-            return (
-                materialized in ('view', 'dictionary')
-                or 'distributed' in materialized
-                or is_distributed
-                or 'Replicated' in engine
-            )
-        return False
+        else:
+            return True
 
     @classmethod
     def create_from(
@@ -134,22 +126,25 @@ class ClickHouseRelation(BaseRelation):
         # If the database is set, and the source schema is "defaulted" to the source.name, override the
         # schema with the database instead, since that's presumably what's intended for clickhouse
         schema = relation_config.schema
+
         can_on_cluster = None
-        engine = None
+        cluster = ""
+        database_engine = ""
         # We placed a hardcoded const (instead of importing it from dbt-core) in order to decouple the packages
         if relation_config.resource_type == NODE_TYPE_SOURCE:
             if schema == relation_config.source_name and relation_config.database:
                 schema = relation_config.database
-
         else:
-            cluster = quoting.credentials.cluster or ''
-            materialized = relation_config.config.get('materialized', '')
-            is_distributed = relation_config.config.get('extra', {}).get('is_distributed')
-            engine = relation_config.config.get('engine', '')
-            database_engine = quoting.credentials.database_engine or ''
-            can_on_cluster = cls.get_on_cluster(
-                cluster, materialized, is_distributed, engine, database_engine
-            )
+            # quoting is only available for non-source nodes
+            cluster = quoting.credentials.cluster or ""
+            database_engine = quoting.credentials.database_engine or ""
+
+        if (
+            cluster
+            and str(relation_config.config.get("disable_on_cluster")).lower() != "true"
+            and 'replicated' not in database_engine.lower()
+        ):
+            can_on_cluster = True
 
         return cls.create(
             database='',
@@ -157,6 +152,5 @@ class ClickHouseRelation(BaseRelation):
             identifier=relation_config.identifier,
             quote_policy=quote_policy,
             can_on_cluster=can_on_cluster,
-            engine=engine,
             **kwargs,
         )

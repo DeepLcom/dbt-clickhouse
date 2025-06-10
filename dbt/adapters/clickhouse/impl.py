@@ -17,15 +17,18 @@ from typing import (
     Union,
 )
 
+from dbt.adapters.base import AdapterConfig, available
+from dbt.adapters.base.impl import BaseAdapter, ConstraintSupport
+from dbt.adapters.base.relation import BaseRelation, InformationSchema
+from dbt.adapters.capability import Capability, CapabilityDict, CapabilitySupport, Support
+from dbt.adapters.contracts.relation import Path, RelationConfig
+from dbt.adapters.events.types import ConstraintNotSupported
+from dbt.adapters.sql import SQLAdapter
 from dbt_common.contracts.constraints import ConstraintType, ModelLevelConstraint
 from dbt_common.events.functions import warn_or_error
 from dbt_common.exceptions import DbtInternalError, DbtRuntimeError, NotImplementedError
 from dbt_common.utils import filter_null_values
 
-from dbt.adapters.base import AdapterConfig, available
-from dbt.adapters.base.impl import BaseAdapter, ConstraintSupport
-from dbt.adapters.base.relation import BaseRelation, InformationSchema
-from dbt.adapters.capability import Capability, CapabilityDict, CapabilitySupport, Support
 from dbt.adapters.clickhouse.cache import ClickHouseRelationsCache
 from dbt.adapters.clickhouse.column import ClickHouseColumn, ClickHouseColumnChanges
 from dbt.adapters.clickhouse.connections import ClickHouseConnectionManager
@@ -34,9 +37,6 @@ from dbt.adapters.clickhouse.logger import logger
 from dbt.adapters.clickhouse.query import quote_identifier
 from dbt.adapters.clickhouse.relation import ClickHouseRelation, ClickHouseRelationType
 from dbt.adapters.clickhouse.util import compare_versions
-from dbt.adapters.contracts.relation import Path, RelationConfig
-from dbt.adapters.events.types import ConstraintNotSupported
-from dbt.adapters.sql import SQLAdapter
 
 if TYPE_CHECKING:
     import agate
@@ -44,10 +44,16 @@ if TYPE_CHECKING:
 GET_CATALOG_MACRO_NAME = 'get_catalog'
 LIST_SCHEMAS_MACRO_NAME = 'list_schemas'
 
+IGNORED_SETTINGS = {
+    'Memory': ['replicated_deduplication_window'],
+    'S3': ['replicated_deduplication_window'],
+}
+
 
 @dataclass
 class ClickHouseConfig(AdapterConfig):
     engine: str = 'MergeTree()'
+    force_on_cluster: Optional[bool] = False
     order_by: Optional[Union[List[str], str]] = 'tuple()'
     partition_by: Optional[Union[List[str], str]] = None
     sharding_key: Optional[Union[List[str], str]] = 'rand()'
@@ -114,7 +120,8 @@ class ClickHouseAdapter(SQLAdapter):
     @available.parse(lambda *a, **k: {})
     def get_clickhouse_cluster_name(self):
         conn = self.connections.get_if_exists()
-        return conn.credentials.cluster
+        if conn.credentials.cluster:
+            return f'"{conn.credentials.cluster}"'
 
     @available.parse(lambda *a, **k: {})
     def get_clickhouse_local_suffix(self):
@@ -160,22 +167,16 @@ class ClickHouseAdapter(SQLAdapter):
         if rel_type != 'table' or not schema or not self.supports_atomic_exchange():
             return False
         ch_db = self.get_ch_database(schema)
-        return ch_db and ch_db.engine in ('Atomic', 'Replicated')
+        return ch_db and ch_db.engine in ('Atomic', 'Replicated', 'Shared')
 
     @available.parse_none
-    def should_on_cluster(
-        self, materialized: str = '', is_distributed: bool = False, engine: str = ''
-    ) -> bool:
+    def should_on_cluster(self) -> bool:
         conn = self.connections.get_if_exists()
         if conn and conn.credentials.cluster:
             return ClickHouseRelation.get_on_cluster(
-                conn.credentials.cluster,
-                materialized,
-                is_distributed,
-                engine,
-                conn.credentials.database_engine,
+                cluster=conn.credentials.cluster, database_engine=conn.credentials.database_engine
             )
-        return ClickHouseRelation.get_on_cluster('', materialized, is_distributed, engine)
+        return ClickHouseRelation.get_on_cluster()
 
     @available.parse_none
     def calculate_incremental_strategy(self, strategy: str) -> str:
@@ -364,7 +365,7 @@ class ClickHouseAdapter(SQLAdapter):
 
         relations = []
         for row in results:
-            name, schema, engine, type_info, db_engine, on_cluster = row
+            name, schema, type_info, db_engine, on_cluster = row
             if 'view' in type_info:
                 rel_type = ClickHouseRelationType.View
             elif type_info == 'dictionary':
@@ -385,7 +386,6 @@ class ClickHouseAdapter(SQLAdapter):
                 type=rel_type,
                 can_exchange=can_exchange,
                 can_on_cluster=can_on_cluster,
-                engine=engine,
             )
             relations.append(relation)
 
@@ -480,12 +480,13 @@ class ClickHouseAdapter(SQLAdapter):
             conn.state = 'close'
 
     @available
-    def get_model_settings(self, model):
+    def get_model_settings(self, model, engine='MergeTree'):
         settings = model['config'].get('settings', {})
         materialization_type = model['config'].get('materialized')
         conn = self.connections.get_if_exists()
         conn.handle.update_model_settings(settings, materialization_type)
         res = []
+        settings = self.filter_settings_by_engine(settings, engine)
         for key in settings:
             res.append(f' {key}={settings[key]}')
         settings_str = '' if len(res) == 0 else 'SETTINGS ' + ', '.join(res) + '\n'
@@ -493,6 +494,24 @@ class ClickHouseAdapter(SQLAdapter):
                     -- end_of_sql
                     {settings_str}
                     """
+
+    @available
+    def filter_settings_by_engine(self, settings, engine):
+        filtered_settings = {}
+
+        if engine.endswith('MergeTree'):
+            # Special case for MergeTree due to all its variations.
+            ignored_settings = IGNORED_SETTINGS.get('MergeTree', [])
+        else:
+            ignored_settings = IGNORED_SETTINGS.get(engine, [])
+
+        for key, value in settings.items():
+            if key in ignored_settings:
+                logger.warning(f"Setting {key} not available for engine {engine}, ignoring.")
+            else:
+                filtered_settings[key] = value
+
+        return filtered_settings
 
     @available
     def get_model_query_settings(self, model, additional_settings: Optional[dict] = None):
@@ -548,8 +567,12 @@ class ClickHouseAdapter(SQLAdapter):
         rendered_columns = []
         for v in raw_columns.values():
             codec = f"CODEC({_codec})" if (_codec := v.get('codec')) else ""
+            ttl = f"TTL {ttl}" if (ttl := v.get('ttl')) else ""
+            # Codec and TTL are optional clauses. The adapter should support scenarios where one
+            # or both are omitted. If specified together, the codec clause should appear first.
+            clauses = " ".join(filter(None, [codec, ttl]))
             rendered_columns.append(
-                f"{quote_identifier(v['name'])} {v['data_type']} {codec}".rstrip()
+                f"{quote_identifier(v['name'])} {v['data_type']} {clauses}".rstrip()
             )
             if v.get("constraints"):
                 warn_or_error(ConstraintNotSupported(constraint='column', adapter='clickhouse'))

@@ -1,3 +1,5 @@
+import os
+
 import pytest
 from dbt.tests.adapter.basic.files import model_incremental, schema_base_yml
 from dbt.tests.adapter.basic.test_incremental import BaseIncremental
@@ -195,7 +197,7 @@ insert_overwrite_inc = """
     SELECT partitionKey1, partitionKey2, orderKey, value
     FROM VALUES(
         'partitionKey1 UInt8, partitionKey2 String, orderKey UInt8, value String',
-        (1, 'p1', 1, 'a'), (1, 'p1', 1, 'b'), (2, 'p1', 1, 'c'), (2, 'p2', 1, 'd')
+        (1, 'p1', 1, 'a'), (1, 'p1', 2, 'b'), (2, 'p1', 3, 'c'), (2, 'p2', 4, 'd')
     )
 {% else %}
     SELECT partitionKey1, partitionKey2, orderKey, value
@@ -207,7 +209,7 @@ insert_overwrite_inc = """
 """
 
 
-class TestInsertReplaceIncremental:
+class TestInsertOverwriteIncremental:
     @pytest.fixture(scope="class")
     def models(self):
         return {"insert_overwrite_inc.sql": insert_overwrite_inc}
@@ -220,9 +222,9 @@ class TestInsertReplaceIncremental:
         )
         assert result == [
             (1, 'p1', 1, 'a'),
-            (1, 'p1', 1, 'b'),
-            (2, 'p1', 1, 'c'),
-            (2, 'p2', 1, 'd'),
+            (1, 'p1', 2, 'b'),
+            (2, 'p1', 3, 'c'),
+            (2, 'p2', 4, 'd'),
         ]
         run_dbt()
         result = project.run_sql(
@@ -231,7 +233,66 @@ class TestInsertReplaceIncremental:
         )
         assert result == [
             (1, 'p1', 2, 'e'),
-            (2, 'p1', 1, 'c'),
-            (2, 'p2', 1, 'd'),
+            (2, 'p1', 3, 'c'),
+            (2, 'p2', 4, 'd'),
+            (3, 'p1', 2, 'f'),
+        ]
+
+
+# "ReplicatedMergeTree('/clickhouse/tables/{shard}/{database}/{table}/{uuid}/', '{replica}')"
+insert_overwrite_replicated_inc = """
+{{ config(
+        materialized='incremental',
+        incremental_strategy='insert_overwrite',
+        partition_by=['partitionKey1', 'partitionKey2'],
+        order_by=['orderKey'],
+        engine="ReplicatedMergeTree('/clickhouse/tables/{uuid}/one_shard', '{server_index}')"
+    )
+}}
+{% if not is_incremental() %}
+    SELECT partitionKey1, partitionKey2, orderKey, value
+    FROM VALUES(
+        'partitionKey1 UInt8, partitionKey2 String, orderKey UInt8, value String',
+        (1, 'p1', 1, 'a'), (1, 'p1', 2, 'b'), (2, 'p1', 3, 'c'), (2, 'p2', 4, 'd')
+    )
+{% else %}
+    SELECT partitionKey1, partitionKey2, orderKey, value
+    FROM VALUES(
+        'partitionKey1 UInt8, partitionKey2 String, orderKey UInt8, value String',
+        (1, 'p1', 2, 'e'), (3, 'p1', 2, 'f')
+    )
+{% endif %}
+"""
+
+
+@pytest.mark.skipif(
+    os.environ.get('DBT_CH_TEST_CLUSTER', '').strip() == '', reason='Not on a cluster'
+)
+class TestInsertOverwriteReplicatedIncremental:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"insert_overwrite_replicated_inc.sql": insert_overwrite_replicated_inc}
+
+    def test_insert_overwrite_replicated_incremental(self, project):
+        run_dbt()
+        result = project.run_sql(
+            "select * from insert_overwrite_replicated_inc order by partitionKey1, partitionKey2, orderKey",
+            fetch="all",
+        )
+        assert result == [
+            (1, 'p1', 1, 'a'),
+            (1, 'p1', 2, 'b'),
+            (2, 'p1', 3, 'c'),
+            (2, 'p2', 4, 'd'),
+        ]
+        run_dbt()
+        result = project.run_sql(
+            "select * from insert_overwrite_replicated_inc order by partitionKey1, partitionKey2, orderKey",
+            fetch="all",
+        )
+        assert result == [
+            (1, 'p1', 2, 'e'),
+            (2, 'p1', 3, 'c'),
+            (2, 'p2', 4, 'd'),
             (3, 'p1', 2, 'f'),
         ]
