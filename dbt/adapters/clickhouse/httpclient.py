@@ -8,6 +8,7 @@ from dbt.adapters.__about__ import version as dbt_adapters_version
 from dbt.adapters.clickhouse import ClickHouseColumn
 from dbt.adapters.clickhouse.__version__ import version as dbt_clickhouse_version
 from dbt.adapters.clickhouse.dbclient import ChClientWrapper, ChRetryableException
+from dbt.adapters.clickhouse.util import hide_stack_trace
 
 
 class ChHttpClient(ChClientWrapper):
@@ -15,13 +16,15 @@ class ChHttpClient(ChClientWrapper):
         try:
             return self._client.query(sql, **kwargs)
         except DatabaseError as ex:
-            raise DbtDatabaseError(str(ex).strip()) from ex
+            err_msg = hide_stack_trace(ex)
+            raise DbtDatabaseError(err_msg) from ex
 
     def command(self, sql, **kwargs):
         try:
             return self._client.command(sql, **kwargs)
         except DatabaseError as ex:
-            raise DbtDatabaseError(str(ex).strip()) from ex
+            err_msg = hide_stack_trace(ex)
+            raise DbtDatabaseError(err_msg) from ex
 
     def columns_in_query(self, sql: str, **kwargs) -> List[ClickHouseColumn]:
         try:
@@ -34,7 +37,8 @@ class ChHttpClient(ChClientWrapper):
                 for name, ch_type in zip(query_result.column_names, query_result.column_types)
             ]
         except DatabaseError as ex:
-            raise DbtDatabaseError(str(ex).strip()) from ex
+            err_msg = hide_stack_trace(ex)
+            raise DbtDatabaseError(err_msg) from ex
 
     def get_ch_setting(self, setting_name):
         setting = self._client.server_settings.get(setting_name)
@@ -62,6 +66,8 @@ class ChHttpClient(ChClientWrapper):
                 send_receive_timeout=credentials.send_receive_timeout,
                 client_name=f'dbt-adapters/{dbt_adapters_version} dbt-clickhouse/{dbt_clickhouse_version}',
                 verify=credentials.verify,
+                client_cert=credentials.client_cert,
+                client_cert_key=credentials.client_cert_key,
                 query_limit=0,
                 settings=self._conn_settings,
             )

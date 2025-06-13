@@ -91,7 +91,7 @@
     {% do exceptions.raise_compiler_error('Cluster name should be defined for using distributed materializations, current is None') %}
   {% endif %}
 
-  {%- set remote_cluster = local_relation.remote_cluster or adapter.get_clickhouse_cluster_name() -%}
+  {%- set remote_cluster = adapter.get_clickhouse_cluster_name() -%}
   {%- set sharding = config.get('sharding_key') -%}
   {%- set reference = "as " ~ local_relation -%}
   {%- if sql -%}
@@ -102,7 +102,7 @@
     {%- set reference = "(" ~ (col_list | join(', ')) ~ ")" -%}
   {%- endif -%}
   create or replace table {{ relation }} {{ on_cluster_clause(relation) }} {{ reference }}
-  engine = Distributed('{{ remote_cluster }}', '{{ local_relation.schema }}', '{{ local_relation.name }}'
+  engine = Distributed({{ remote_cluster }}, '{{ local_relation.schema }}', '{{ local_relation.name }}'
   {%- if sharding is not none and sharding.strip() != '' -%}
     , {{ sharding }}
   {%- else %}
@@ -142,7 +142,8 @@
   {{ order_cols(label="order by") }}
   {{ primary_key_clause(label="primary key") }}
   {{ partition_cols(label="partition by") }}
-  {{ adapter.get_model_settings(model) }}
+  {{ ttl_config(label="ttl")}}
+  {{ adapter.get_model_settings(model, config.get('engine', default='MergeTree')) }}
 {%- endmacro %}
 
 {% macro create_distributed_local_table(distributed_relation, shard_relation, structure_relation, sql_query=none) -%}
