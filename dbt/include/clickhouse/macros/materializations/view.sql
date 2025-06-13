@@ -66,7 +66,11 @@
       {{ get_assert_columns_equivalent(sql) }}
     {%- endif %}
   as (
-    {{ sql }}
+    {% if sql is none %}
+      {{clickhouse__create_select_query_from_schema()}}
+    {%- else -%}
+      {{ sql }}
+    {%- endif -%}
     {{ adapter.get_model_query_settings(model) }}
   )
       {% if model.get('config').get('materialized') == 'view' %}
