@@ -27,7 +27,7 @@
 
   {%- set upsert = target.derivative('__snapshot_upsert') -%}
   {% call statement('create_upsert_relation') %}
-    create table if not exists {{ upsert }} as {{ target }}
+    create table if not exists {{ upsert }} {{ on_cluster_clause(upsert) }} as {{ target }}
   {% endcall %}
 
   {% call statement('insert_unchanged_data') %}
@@ -73,11 +73,11 @@
   {% if target.can_exchange %}
     {% do exchange_tables_atomic(upsert, target) %}
     {% call statement('drop_exchanged_relation') %}
-      drop table if exists {{ upsert }};
+      drop table if exists {{ upsert }} {{ on_cluster_clause(upsert) }};
     {% endcall %}
   {% else %}
     {% call statement('drop_target_relation') %}
-      drop table if exists {{ target }};
+      drop table if exists {{ target }} {{ on_cluster_clause(target) }};
     {% endcall %}
     {% call statement('rename_upsert_relation') %}
       rename table {{ upsert }} to {{ target }};

@@ -249,3 +249,66 @@ class TestReplicatedTableMaterialization(BaseSimpleMaterializations):
         assert len(results) == 1
 
         self.assert_total_count_correct(project)
+
+
+default_cluster_materialized_config = """
+            {{ config(
+                engine='MergeTree',
+                materialized='materialized_view'
+            ) }}
+        """
+models_disable_on_cluster_config = """
+    {{ config(
+                engine='MergeTree',
+                materialized='materialized_view',
+                disable_on_cluster='true'
+            ) }}
+"""
+
+
+class TestMergeTreeDisableClusterMaterialization:
+    '''Test MergeTree materialized view optionally created across cluster using disable_on_cluster config'''
+
+    @pytest.fixture(scope="class")
+    def seeds(self):
+        return {
+            "schema.yml": base_seeds_schema_yml,
+            "base.csv": seeds_base_csv,
+        }
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "default_cluster_materialized.sql": default_cluster_materialized_config + model_base,
+            "disable_cluster_materialized.sql": models_disable_on_cluster_config + model_base,
+            "schema.yml": schema_base_yml,
+        }
+
+    def assert_object_count_on_cluster(self, project, model_name, expected_count: int):
+        cluster = project.test_config['cluster']
+        table_relation = relation_from_name(project.adapter, model_name)
+
+        table_count = project.run_sql(
+            f"select count() From clusterAllReplicas('{cluster}', system.tables) "
+            f"where database='{table_relation.schema}' and name='{table_relation.identifier}'",
+            fetch="one",
+        )
+        assert table_count[0] == expected_count
+
+    @pytest.mark.skipif(
+        os.environ.get('DBT_CH_TEST_CLUSTER', '').strip() == '', reason='Not on a cluster'
+    )
+    def test_create_on_cluster_by_default(self, project):
+        run_dbt(["seed"])
+        results = run_dbt(["run", "--select", "default_cluster_materialized.sql"])
+        assert len(results) == 1
+        self.assert_object_count_on_cluster(project, "default_cluster_materialized", 3)
+
+    @pytest.mark.skipif(
+        os.environ.get('DBT_CH_TEST_CLUSTER', '').strip() == '', reason='Not on a cluster'
+    )
+    def test_disable_on_cluster(self, project):
+        run_dbt(["seed"])
+        results = run_dbt(["run", "--select", "disable_cluster_materialized.sql"])
+        assert len(results) == 1
+        self.assert_object_count_on_cluster(project, "disable_cluster_materialized", 1)

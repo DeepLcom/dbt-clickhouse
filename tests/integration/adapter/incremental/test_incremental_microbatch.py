@@ -8,6 +8,7 @@ _input_model_sql = """
         event_time='event_time'
     )
 }}
+
 select 1 as id, toDateTime('2020-01-01 00:00:00') as event_time
 union all
 select 2 as id, toDateTime('2020-01-02 00:00:00') as event_time
@@ -27,6 +28,7 @@ _microbatch_model_sql = """
         begin=modules.datetime.datetime(2020, 1, 1, 0, 0, 0)
     )
 }}
+
 select * from {{ ref('input_model') }}
 """
 

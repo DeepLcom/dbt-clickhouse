@@ -38,7 +38,7 @@
   {%- set preexisting_intermediate_relation = load_cached_relation(intermediate_relation)-%}
   {{ drop_relation_if_exists(preexisting_intermediate_relation) }}
   {{ drop_relation_if_exists(distributed_intermediate_relation) }}
-  
+
   {%- set view_relation = make_intermediate_relation(target_relation, '__dbt_view_tmp') -%}
   {{ drop_relation_if_exists(view_relation) }}
 
@@ -53,7 +53,7 @@
   {% do to_drop.append(view_relation) %}
 
   {% if existing_relation_local is none %}
-    -- No existing table, simply create a new one
+    -- No existing local table, recreate local and distributed tables
     {{ create_distributed_local_table(target_relation, target_relation_local, view_relation, sql) }}
 
   {% elif full_refresh_mode %}
@@ -62,7 +62,7 @@
     {% do adapter.drop_relation(distributed_intermediate_relation) or '' %}
     {% set need_swap = true %}
 
-  {% elif inserts_only or unique_key is none -%}
+  {% elif inserts_only -%}
     -- There are no updates/deletes or duplicate keys are allowed.  Simply add all of the new rows to the existing
     -- table. It is the user's responsibility to avoid duplicates.  Note that "inserts_only" is a ClickHouse adapter
     -- specific configurable that is used to avoid creating an expensive intermediate table.
@@ -100,6 +100,8 @@
         {% do incremental_predicates.append(config.get("event_time") ~ " < toDateTime('" ~ config.get("__dbt_internal_microbatch_event_time_end").strftime("%Y-%m-%d %H:%M:%S") ~ "')") %}
       {%- endif -%}
       {% do clickhouse__incremental_delete_insert(existing_relation, unique_key, incremental_predicates, True) %}
+    {% elif incremental_strategy == 'insert_overwrite' %}
+      {% do clickhouse__incremental_insert_overwrite(existing_relation, partition_by, True) %}
     {% elif incremental_strategy == 'append' %}
       {%- if language == 'python' -%}
         {%- call statement('main', language=language) -%}

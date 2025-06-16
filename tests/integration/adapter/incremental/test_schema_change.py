@@ -189,6 +189,7 @@ out_of_order_columns_sql = """
 {{
     config(
         materialized='%s',
+        incremental_strategy='%s',
         unique_key='col_1',
         on_schema_change='fail'
     )
@@ -203,7 +204,7 @@ from numbers(3)
 select
     number + 1 as col_2,
     number as col_1
-from numbers(2, 3)
+from numbers(3, 2)
 {%% endif %%}
 """
 
@@ -212,12 +213,23 @@ class TestReordering:
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "out_of_order_columns.sql": out_of_order_columns_sql % "incremental",
-            "out_of_order_columns_distributed.sql": out_of_order_columns_sql
-            % "distributed_incremental",
+            "out_of_order_columns.sql": out_of_order_columns_sql % ("incremental", "delete_insert"),
+            "out_of_order_columns_dist.sql": out_of_order_columns_sql
+            % ("distributed_incremental", "delete_insert"),
+            "out_of_order_columns_append.sql": out_of_order_columns_sql % ("incremental", "append"),
+            "out_of_order_columns_append_dist.sql": out_of_order_columns_sql
+            % ("distributed_incremental", "append"),
         }
 
-    @pytest.mark.parametrize("model", ("out_of_order_columns", "out_of_order_columns_distributed"))
+    @pytest.mark.parametrize(
+        "model",
+        (
+            "out_of_order_columns",
+            "out_of_order_columns_dist",
+            "out_of_order_columns_append",
+            "out_of_order_columns_append_dist",
+        ),
+    )
     def test_reordering(self, project, model):
         if (
             model == "out_of_order_columns_distributed"
@@ -226,8 +238,7 @@ class TestReordering:
             pytest.skip("Not on a cluster")
         run_dbt(["run", "--select", model])
         result = project.run_sql(f"select * from {model} order by col_1", fetch="all")
-        assert result[0][1] == 1
+        assert result == [(0, 1), (1, 2), (2, 3)]
         run_dbt(["run", "--select", model])
         result = project.run_sql(f"select * from {model} order by col_1", fetch="all")
-        assert result[0][1] == 1
-        assert result[3][1] == 4
+        assert result == [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5)]

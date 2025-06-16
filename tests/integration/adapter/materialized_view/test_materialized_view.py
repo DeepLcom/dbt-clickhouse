@@ -15,6 +15,9 @@ id,name,age,department
 1231,Dade,33,engineering
 6666,Ksenia,48,engineering
 8888,Kate,50,engineering
+1000,Alfie,10,sales
+2000,Bill,20,sales
+3000,Charlie,30,sales
 """.lstrip()
 
 # This model is parameterized, in a way, by the "run_type" dbt project variable
@@ -25,10 +28,11 @@ MV_MODEL = """
        materialized='materialized_view',
        engine='MergeTree()',
        order_by='(id)',
-       schema='custom_schema',
+       schema='catchup' if var('run_type', '') == 'catchup' else 'custom_schema',
+        **({'catchup': False} if var('run_type', '') == 'catchup' else {})
 ) }}
 
-{% if var('run_type', '') == '' %}
+{% if var('run_type', '') in ['', 'catchup'] %}
 select
     id,
     name,
@@ -40,8 +44,7 @@ select
 from {{ source('raw', 'people') }}
 where department = 'engineering'
 
-{% else %}
-
+{% elif var('run_type', '') == 'extended_schema' %}
 select
     id,
     name,
@@ -57,7 +60,6 @@ where department = 'engineering'
 
 {% endif %}
 """
-
 
 SEED_SCHEMA_YML = """
 version: 2
@@ -127,6 +129,49 @@ class TestBasicMV:
 
         result = project.run_sql(f"select count(*) from {schema}.hackers", fetch="all")
         assert result[0][0] == 4
+
+    def test_disabled_catchup(self, project):
+        """
+        1. create a base table via dbt seed
+        2. create a model with catchup disabled as a materialized view, selecting from the table created in (1)
+        3. insert data into the base table and make sure it's there in the target table created in (2)
+        """
+        schema = quote_identifier(project.test_schema + "_catchup")
+        results = run_dbt(["seed"])
+        assert len(results) == 1
+        columns = project.run_sql("DESCRIBE TABLE people", fetch="all")
+        assert columns[0][1] == "Int32"
+
+        # create the model with catchup disabled
+        run_vars = {"run_type": "catchup"}
+        run_dbt(["run", "--vars", json.dumps(run_vars)])
+        # check that we only have the new row, without the historical data
+        assert len(results) == 1
+
+        columns = project.run_sql(f"DESCRIBE TABLE {schema}.hackers", fetch="all")
+        assert columns[0][1] == "Int32"
+
+        columns = project.run_sql(f"DESCRIBE {schema}.hackers_mv", fetch="all")
+        assert columns[0][1] == "Int32"
+
+        check_relation_types(
+            project.adapter,
+            {
+                "hackers_mv": "view",
+                "hackers": "table",
+            },
+        )
+
+        # insert some data and make sure it reaches the target table
+        project.run_sql(
+            f"""
+           insert into {quote_identifier(project.test_schema)}.people ("id", "name", "age", "department")
+               values (1232,'Dade',16,'engineering'), (9999,'eugene',40,'malware');
+           """
+        )
+
+        result = project.run_sql(f"select count(*) from {schema}.hackers", fetch="all")
+        assert result[0][0] == 1
 
 
 class TestUpdateMV:
